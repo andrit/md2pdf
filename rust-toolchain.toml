@@ -1,0 +1,5 @@
+# Pinned so the Linux container and the macOS host compile with the identical
+# toolchain. Bump deliberately, not incidentally.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

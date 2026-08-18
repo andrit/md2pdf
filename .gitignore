@@ -1,0 +1,13 @@
+# Build artifacts. The container sets CARGO_TARGET_DIR outside this tree, but the
+# macOS host uses the default — and this tree is a shared bind mount, so Linux and
+# macOS artifacts must never collide here.
+/target
+
+# Cargo.lock IS committed: md2pdf is an application, not a library, and pinning
+# the whole graph is the point. Do not add it here.
+
+# Spike scratch
+spikes/**/target
+spikes/**/*.pdf
+spikes/**/*.png
+spikes/**/decisions.json

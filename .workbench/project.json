@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "mcp_tools": [
+    "rag_ingest",
+    "rag_query",
+    "rag_status",
+    "rag_reindex",
+    "project_test",
+    "rag_eval",
+    "agent_remember",
+    "agent_recall",
+    "agent_forget",
+    "agent_memories",
+    "conversation_create",
+    "conversation_list",
+    "conversation_get",
+    "conversation_append"
+  ],
+  "universal_advance_gate": {
+    "description": "Applies to every code phase across all project types before the phase is marked complete.",
+    "skill": "/phase-audit",
+    "exempt_phase_ids": [
+      "0",
+      "D",
+      "7",
+      "8",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16"
+    ],
+    "exempt_reason": "Phase 0 and D produce documents only. Phase 7 captures learnings. Phases 8, 11-16 are human-owned QA, infra, legal, and launch steps with no new code deliverables.",
+    "criterion": "Run /phase-audit. Address critical findings (dead code, broken conventions) before advancing. Defer acceptable shortcuts with a ponytail: comment. Attach the score line to the phase sign-off."
+  },
+  "search_config": {
+    "vector_weight": 0.7,
+    "text_weight": 0.3,
+    "match_threshold": 0.5,
+    "chunk_size": 500,
+    "chunk_overlap": 50
+  },
+  "foundation_skills": [
+    "event-storming",
+    "define-bounded-contexts",
+    "design-aggregates",
+    "model-domain-events",
+    "ubiquitous-language",
+    "ux-research-methods",
+    "design-system-setup"
+  ],
+  "skills_index": "_base/skills/INDEX.md",
+  "provides": [],
+  "consumes": [],
+  "capabilities": [],
+  "design_skills": [
+    "visual-design-principles",
+    "color-theory-and-systems",
+    "typography-system",
+    "layout-and-composition",
+    "ux-principles-and-patterns",
+    "ux-research-methods",
+    "design-system-setup",
+    "responsive-layout-patterns",
+    "accessibility-implementation",
+    "animation-and-motion"
+  ],
+  "type": "custom",
+  "description": "Custom project — all tools available, no type-specific guidance",
+  "roadmap": "0. Foundation: event-storming → ubiquitous-language (even for custom projects — name the domain concepts before building)\n1. Define what you’re building\n2. Set up the project structure\n3. Build iteratively with Claude Code\n4. Test as you go with /test\n5. Ingest relevant docs into the knowledgebase as needed\n6. Ship when ready",
+  "skills": [
+    "setup-project-structure",
+    "add-mcp-tool-integration"
+  ],
+  "name": "md2pdf",
+  "framework": null,
+  "created_at": "2026-08-16T20:23:30.240Z"
+}

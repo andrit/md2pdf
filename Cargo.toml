@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/md2pdf-domain",
+    "crates/md2pdf-convert",
+    "crates/md2pdf-typeset",
+    "crates/md2pdf-paths",
+    "crates/md2pdf-engine",
+    "crates/md2pdf-cli",
+]
+# Spikes are throwaway experiments with their own pinned deps. They are not
+# part of the product and must not be built or linted with it.
+exclude = ["spikes"]
+
+# Pinned exactly. The typst crate API churns across releases (8 breaking changes
+# observed in ~200 lines going to 0.15.1). Upgrades are a scheduled task with a
+# runbook — never a routine `cargo update`. See docs/typst-upgrade.md.
+[workspace.dependencies]
+typst         = "=0.15.1"
+typst-layout  = "=0.15.1"
+typst-pdf     = "=0.15.1"
+typst-render  = "=0.15.1"
+typst-kit     = { version = "=0.15.1", features = ["embedded-fonts"] }
+pulldown-cmark = "0.12"
+serde         = { version = "1", features = ["derive"] }
+serde_json    = "1"
+thiserror     = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"   # deliberately undecided: freeware vs paid is still open

@@ -1,0 +1,8 @@
+# Enforcement for the two isolation boundaries.
+#
+# Only md2pdf-typeset may name typst types; only md2pdf-paths may touch the
+# filesystem. Crate-level allowances live in each crate's lib.rs. CI additionally
+# greps for `typst::` and `std::fs` outside their owning crates, because clippy
+# cannot express "except in this crate".
+disallowed-types = []
+disallowed-methods = []

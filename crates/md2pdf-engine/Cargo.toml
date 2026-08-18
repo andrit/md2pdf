@@ -1,0 +1,13 @@
+[package]
+name = "md2pdf-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+md2pdf-domain = { path = "../md2pdf-domain" }
+md2pdf-convert = { path = "../md2pdf-convert" }
+md2pdf-typeset = { path = "../md2pdf-typeset" }
+md2pdf-paths = { path = "../md2pdf-paths" }
+serde = { workspace = true }
+thiserror = { workspace = true }

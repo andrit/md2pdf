@@ -1,0 +1,259 @@
+//! Behavioural contract tests for the Typst boundary.
+//!
+//! These do NOT test our arithmetic. They pin **Typst's observable behaviour**, so
+//! that a version bump which still compiles but changes semantics fails loudly.
+//!
+//! Going to 0.15.1 produced eight breaking API changes — every one a compile error,
+//! which is the safe kind. The dangerous kind is silent behavioural drift: if a future
+//! `measure()` stopped clamping, or `raw` blocks stopped wrapping, nothing would fail
+//! to compile and the escalation ladder would quietly start making wrong decisions.
+//! That is what these catch.
+//!
+//! **Tolerance is 0.5pt** — exactly the shrink step. Any drift large enough to change
+//! a rung fails; anything smaller cannot. That makes epsilon principled rather than
+//! guessed.
+
+use md2pdf_domain::{DecisionMap, Element, ElementClass, ElementId, Floors, Rung, Template};
+use md2pdf_typeset::Typesetter;
+
+/// The shrink step. Drift below this cannot change a decision.
+const EPSILON_PT: f64 = 0.5;
+
+/// Deliberately narrow so overflow is easy to provoke, and fixed so the pinned
+/// numbers below mean something.
+fn template() -> Template {
+    Template {
+        name: "contract".into(),
+        page_width_pt: 220.0,
+        page_height_pt: 320.0,
+        margin_pt: 12.0,
+        base_size_pt: 10.0,
+        floors: Floors {
+            prose_pt: 9.0,
+            table_pt: 7.0,
+            code_pt: 7.0,
+        },
+        font_body: "Source Sans 3".into(),
+        font_mono: "JetBrains Mono".into(),
+    }
+}
+
+fn wide_table() -> Element {
+    Element::new(
+        1,
+        ElementClass::Table,
+        r#"#table(columns: 6, ..range(6).map(i => [longvalue#i]))"#,
+    )
+}
+fn narrow_table() -> Element {
+    Element::new(
+        2,
+        ElementClass::Table,
+        r#"#table(columns: 3, [a], [b], [c])"#,
+    )
+}
+fn prose() -> Element {
+    Element::new(0, ElementClass::Prose, "#lorem(18)")
+}
+fn code() -> Element {
+    Element::new(
+        3,
+        ElementClass::Code,
+        r#"#raw("fn escalate(el: &Element, avail: Abs) -> Decision { todo!() }", lang: "rust", block: true)"#,
+    )
+}
+fn figure() -> Element {
+    Element::new(4, ElementClass::Image, "#rect(width: 400pt, height: 30pt)")
+}
+
+fn probe(elements: &[Element]) -> DecisionMap {
+    Typesetter::new()
+        .probe(elements, &template())
+        .expect("probe compiles")
+        .0
+}
+
+// ---------------------------------------------------------------------------
+// The available width the Template computes must match what Typst would report.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn available_width_is_page_minus_margins() {
+    // 220 - 2*12. Verified against `layout()` in the spike, which reported 196.0.
+    // The ProbePass relies on this being computable without asking Typst.
+    assert!((template().available_pt() - 196.0).abs() < f64::EPSILON);
+}
+
+// ---------------------------------------------------------------------------
+// The escalation ladder's decisions. These are the contract that matters.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn wide_table_escalates_to_rotate() {
+    let els = vec![wide_table()];
+    let map = probe(&els);
+    let d = map.get(&els[0].id).expect("decision for the table");
+    assert_eq!(
+        d.rung,
+        Rung::Rotate,
+        "a 6-column table at 196pt must reach the floor and still not fit; got {:?} \
+         (natural {:.2}pt)",
+        d.rung,
+        d.natural_pt
+    );
+}
+
+#[test]
+fn narrow_table_is_left_alone() {
+    let els = vec![narrow_table()];
+    let map = probe(&els);
+    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+}
+
+#[test]
+fn prose_never_overflows_because_it_wraps() {
+    // The naive predicate `natural > available` is TRUE here — prose laid out on one
+    // infinite line is far wider than the page. If this test ever reports a rung
+    // other than None, the Wrappable/Atomic split has been broken.
+    let els = vec![prose()];
+    let map = probe(&els);
+    let d = map.get(&els[0].id).unwrap();
+    assert_eq!(d.rung, Rung::None);
+    assert!(
+        d.natural_pt > d.available_pt,
+        "precondition: prose natural width should exceed available, else this test \
+         proves nothing (natural {:.2}, available {:.2})",
+        d.natural_pt,
+        d.available_pt
+    );
+}
+
+#[test]
+fn oversized_figure_escalates_to_rotate() {
+    let els = vec![figure()];
+    let map = probe(&els);
+    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::Rotate);
+}
+
+// ---------------------------------------------------------------------------
+// Typst behaviours we depend on. If these change, our model is wrong.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn raw_blocks_wrap_so_code_is_wrappable() {
+    // Verified in 0.15.1: a long `raw(block: true)` line breaks rather than
+    // overflowing. `ElementClass::Code::is_atomic()` returns false BECAUSE of this.
+    // If Typst ever stops wrapping raw blocks, Code must become Atomic.
+    assert!(!ElementClass::Code.is_atomic());
+    let els = vec![code()];
+    let map = probe(&els);
+    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+}
+
+#[test]
+fn measured_natural_width_is_stable() {
+    // Pinned measurements, tolerance = one shrink step. These are the numbers the
+    // ladder branches on; drift beyond half a point can change a rung.
+    let els = vec![wide_table(), narrow_table(), figure()];
+    let map = probe(&els);
+
+    let expect = [
+        (&els[0], 335.22, "wide 6-column table"),
+        (&els[1], 45.13, "narrow 3-column table"),
+        (&els[2], 400.00, "400pt figure"),
+    ];
+
+    // Collect every mismatch rather than panicking on the first: after a Typst
+    // upgrade you want the whole picture in one run, not one number at a time.
+    let mut drift = Vec::new();
+    for (el, want, what) in expect {
+        let got = map.get(&el.id).unwrap().natural_pt;
+        if (got - want).abs() > EPSILON_PT {
+            drift.push(format!("{what}: expected {want:.2}pt, got {got:.2}pt"));
+        }
+    }
+    assert!(
+        drift.is_empty(),
+        "measured natural widths drifted beyond {EPSILON_PT}pt:\n  {}\n\
+         If this is a deliberate Typst upgrade, re-verify the ladder against real \
+         output and update the pins in the same commit. See docs/typst-upgrade.md.",
+        drift.join("\n  ")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The RenderPass acts where the ProbePass only decided.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn rotate_produces_a_landscape_page() {
+    let els = vec![prose(), wide_table(), prose()];
+    let ts = Typesetter::new();
+    let tpl = template();
+    let (map, diagnostic) = ts.probe(&els, &tpl).expect("probe");
+    let out = ts.render(&els, &tpl, &map).expect("render");
+
+    let geo = out.geometry();
+    assert!(
+        geo.iter().any(|p| p.is_landscape()),
+        "the rotated table must land on a landscape page; got {geo:?}"
+    );
+    assert!(
+        diagnostic.is_flagged(),
+        "a rotation is a Compromise and must be recorded"
+    );
+}
+
+#[test]
+fn preview_and_export_come_from_one_compilation() {
+    let els = vec![prose(), wide_table()];
+    let ts = Typesetter::new();
+    let tpl = template();
+    let (map, _) = ts.probe(&els, &tpl).unwrap();
+    let out = ts.render(&els, &tpl, &map).unwrap();
+
+    let pdf = out.pdf().expect("pdf export");
+    assert!(pdf.starts_with(b"%PDF"), "expected a PDF header");
+
+    let (w, h, px) = out.raster(0, 2.0).expect("raster page 1");
+    assert_eq!(px.len(), (w * h * 4) as usize, "RGBA8");
+    assert!(w > 0 && h > 0);
+}
+
+// ---------------------------------------------------------------------------
+// The FontBook. Typst ships no sans-serif; ours must be present.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn shipped_fontbook_contains_our_faces() {
+    let families = Typesetter::new().font_families();
+    for want in ["Source Sans 3", "JetBrains Mono"] {
+        assert!(
+            families.iter().any(|f| f == want),
+            "{want} missing from the shipped FontBook; have {families:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Override staleness — the hole content-hashing closes.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_stale_override_is_rejected_not_misapplied() {
+    let els = vec![wide_table()];
+    let mut map = probe(&els);
+
+    // Same position, different content: the Source was edited externally.
+    let edited = ElementId::new(els[0].id.order, "#table(columns: 2, [a], [b])");
+    assert!(
+        !map.apply_override(&edited, Rung::None),
+        "an Override whose content hash no longer matches must be dropped, not \
+         applied to whatever now occupies that position"
+    );
+    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::Rotate, "unchanged");
+
+    // The live id still works.
+    assert!(map.apply_override(&els[0].id, Rung::None));
+    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+}

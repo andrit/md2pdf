@@ -1,0 +1,15 @@
+[package]
+name = "md2pdf-typeset"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+md2pdf-domain = { path = "../md2pdf-domain" }
+typst = { workspace = true }
+typst-layout = { workspace = true }
+typst-pdf = { workspace = true }
+typst-render = { workspace = true }
+typst-kit = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

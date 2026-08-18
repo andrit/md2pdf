@@ -1,0 +1,9 @@
+[package]
+name = "md2pdf-paths"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+md2pdf-domain = { path = "../md2pdf-domain" }
+thiserror = { workspace = true }

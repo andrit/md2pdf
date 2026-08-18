@@ -1,0 +1,124 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -sf http://mcp-server:3100/health > /dev/null 2>&1 && echo '✅ Workbench services running' >&2 || echo '⚠️  Workbench services not reachable — run make up first' >&2",
+            "timeout": 5,
+            "statusMessage": "Checking workbench services..."
+          }
+        ]
+      }
+    ],
+
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /workspace/.claude/hooks/pre-compact.py",
+            "timeout": 30,
+            "statusMessage": "Saving conversation history before compaction..."
+          }
+        ]
+      }
+    ],
+
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️  Context was compacted. Your conversation history has been preserved. To restore context:\n  1. Read CLAUDE.md for project architecture\n  2. /recall session:working-on — what you were working on\n  3. /recall session:compact-summary — full session summary with tool calls and decisions\n  4. /query <topic> — search the knowledgebase for anything discussed earlier\nThe full transcript is saved in .workbench/transcripts/' >&2; exit 2",
+            "timeout": 5,
+            "statusMessage": "Restoring context after compaction..."
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Before stopping: save your working state so the next session can pick up where you left off.\n  /remember session:working-on \"<what you were doing>\"\n  /remember session:decisions \"<key decisions made>\"' >&2; exit 0",
+            "timeout": 5,
+            "statusMessage": "Session ending..."
+          },
+          {
+            "type": "command",
+            "command": "python3 /workbench/design/patentpending/export_prompt_history.py > /dev/null 2>&1; exit 0",
+            "timeout": 15,
+            "statusMessage": "Updating inventor prompt record..."
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); FILE=$(echo $INPUT | python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"inputs\",{}).get(\"file_path\",\"\"))' 2>/dev/null); if echo \"$FILE\" | grep -q '^documents/\\|/documents/'; then echo \"📄 File written to documents/ — consider running /ingest $FILE to add it to the knowledgebase\" >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+
+    "PreToolUse": [
+      {
+        "matcher": "Bash(rm -rf *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Blocked: rm -rf with wildcard. Be more specific about what to delete.' >&2; exit 2",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash(docker system prune*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Blocked: docker system prune would destroy workbench volumes. Use docker compose down -v if you need to reset.' >&2; exit 2",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(curl http://mcp-server:3100/*)",
+      "Bash(python3 /workspace/scripts/*)",
+      "Bash(python3 /workspace/.claude/hooks/*)",
+      "Bash(npx tsc*)",
+      "Bash(npx vitest*)",
+      "Bash(npm install*)",
+      "Bash(npm run*)",
+      "Bash(npm test*)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Node /workspace/apps/mcp-server/dist/*"
+    ]
+  }
+}
