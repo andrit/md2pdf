@@ -1169,6 +1169,7 @@ name = "md2pdf-convert"
 version = "0.1.0"
 dependencies = [
  "md2pdf-domain",
+ "md2pdf-typeset",
  "pulldown-cmark",
  "thiserror",
 ]

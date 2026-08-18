@@ -8,3 +8,10 @@ license.workspace = true
 md2pdf-domain = { path = "../md2pdf-domain" }
 pulldown-cmark = { workspace = true }
 thiserror = { workspace = true }
+
+# Test-only. The escaping round-trip needs a real compiler as its oracle: text in,
+# compile, text out, compare. Acyclic (typeset does not depend on convert), and it
+# does not breach the typst boundary — check-boundaries.sh greps for `typst::`,
+# which nothing here names.
+[dev-dependencies]
+md2pdf-typeset = { path = "../md2pdf-typeset" }

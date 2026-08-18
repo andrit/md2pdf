@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::markup::Markup;
+
 /// Addresses one Element across the ProbePass, the RenderPass, and recompilations.
 ///
 /// `order` is assigned by md2pdf when it emits the Markup — stable by construction,
@@ -97,14 +99,16 @@ pub struct Element {
     pub id: ElementId,
     pub class: ElementClass,
     /// Typst markup for this element's body, emitted by md2pdf-convert.
-    pub body: String,
+    ///
+    /// Typed as [`Markup`] rather than `String` so that unescaped document text
+    /// cannot arrive here without an explicit `Markup::raw` at the call site.
+    pub body: Markup,
 }
 
 impl Element {
-    pub fn new(order: u32, class: ElementClass, body: impl Into<String>) -> Self {
-        let body = body.into();
+    pub fn new(order: u32, class: ElementClass, body: Markup) -> Self {
         Self {
-            id: ElementId::new(order, &body),
+            id: ElementId::new(order, body.as_str()),
             class,
             body,
         }

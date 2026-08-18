@@ -78,6 +78,11 @@ impl Compilation {
     pub fn geometry(&self) -> Vec<PageGeometry> {
         export::geometry(&self.doc)
     }
+    /// The plain text Typst actually rendered. The oracle for escaping round-trip
+    /// tests: what came out must equal what went in.
+    pub fn text(&self) -> String {
+        export::text(&self.doc)
+    }
     pub fn page_count(&self) -> usize {
         self.doc.pages().len()
     }

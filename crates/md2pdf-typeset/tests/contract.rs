@@ -13,7 +13,9 @@
 //! a rung fails; anything smaller cannot. That makes epsilon principled rather than
 //! guessed.
 
-use md2pdf_domain::{DecisionMap, Element, ElementClass, ElementId, Floors, Rung, Template};
+use md2pdf_domain::{
+    DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Rung, Template,
+};
 use md2pdf_typeset::Typesetter;
 
 /// The shrink step. Drift below this cannot change a decision.
@@ -42,28 +44,34 @@ fn wide_table() -> Element {
     Element::new(
         1,
         ElementClass::Table,
-        r#"#table(columns: 6, ..range(6).map(i => [longvalue#i]))"#,
+        Markup::raw(r#"#table(columns: 6, ..range(6).map(i => [longvalue#i]))"#),
     )
 }
 fn narrow_table() -> Element {
     Element::new(
         2,
         ElementClass::Table,
-        r#"#table(columns: 3, [a], [b], [c])"#,
+        Markup::raw(r#"#table(columns: 3, [a], [b], [c])"#),
     )
 }
 fn prose() -> Element {
-    Element::new(0, ElementClass::Prose, "#lorem(18)")
+    Element::new(0, ElementClass::Prose, Markup::raw("#lorem(18)"))
 }
 fn code() -> Element {
     Element::new(
         3,
         ElementClass::Code,
-        r#"#raw("fn escalate(el: &Element, avail: Abs) -> Decision { todo!() }", lang: "rust", block: true)"#,
+        Markup::raw(
+            r#"#raw("fn escalate(el: &Element, avail: Abs) -> Decision { todo!() }", lang: "rust", block: true)"#,
+        ),
     )
 }
 fn figure() -> Element {
-    Element::new(4, ElementClass::Image, "#rect(width: 400pt, height: 30pt)")
+    Element::new(
+        4,
+        ElementClass::Image,
+        Markup::raw("#rect(width: 400pt, height: 30pt)"),
+    )
 }
 
 fn probe(elements: &[Element]) -> DecisionMap {

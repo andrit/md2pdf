@@ -20,7 +20,12 @@ if [ -n "$leaks" ]; then
   fail=1
 fi
 
-manifests=$(grep -ln 'typst' crates/*/Cargo.toml | grep -v 'md2pdf-typeset' || true)
+# Match a dependency *key* at line start (`typst = ...`, `typst-pdf = ...`), not the
+# word "typst" wherever it appears. The previous bare grep flagged its own explanatory
+# comments, and would flag `md2pdf-typeset = { path = ... }` — a legitimate dependency
+# on the anti-corruption layer, which is the supported way to reach typst.
+manifests=$(grep -lE '^[[:space:]]*typst(-[a-z]+)?[[:space:]]*=' crates/*/Cargo.toml \
+            | grep -v 'md2pdf-typeset' || true)
 if [ -n "$manifests" ]; then
   echo "FAIL: typst added to a manifest outside md2pdf-typeset:"
   echo "$manifests" | sed 's/^/  /'

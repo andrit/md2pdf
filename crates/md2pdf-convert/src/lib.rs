@@ -9,6 +9,8 @@
 
 // markdown construct -> ElementClass (Atomic vs Wrappable)
 pub mod classify;
+// arbitrary document text -> text safe inside Typst markup
+pub mod escape;
 // internal events -> Typst Markup
 pub mod emit;
 // relative-path resolution; remote-image policy
