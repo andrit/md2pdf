@@ -1,6 +1,6 @@
 # Plan — the Conversion crate (`md2pdf-convert`)
 
-**Status:** proposed, awaiting the gate · **Written:** 2026-08-18
+**Status:** approved and in progress — T5, T6 complete · **Written:** 2026-08-18 · **Amended:** 2026-08-18
 **Continues:** T1–T4 (the Typst anti-corruption layer), complete and verified.
 
 The Conversion bounded context: **markdown in, Typst markup out. Pure and total, no I/O.**
@@ -142,13 +142,47 @@ BlockQuote / Alert -> Quote        CodeBlock        -> Code
 One top-level block becomes one `Element`. Nested content is emitted **into the parent's body**.
 Class comes from the **outermost** construct.
 
-**Known ceiling** (gets a `ponytail:` comment, not a v1 fix):
+**Known ceiling** (gets a `ponytail:` comment, not a v1 fix — now live in `classify.rs`):
 
 ```rust
 // ponytail: an atomic table nested inside a wrappable blockquote inherits Quote,
 // so it never enters the escalation ladder and can overflow.
 // ceiling: nested atomics. upgrade: promote nested atomics to their own Elements.
 ```
+
+#### Exception to one-block-one-Element: footnote definitions *(added 2026-08-18)*
+
+**GFM footnote definitions must NOT become their own `Element`.** They are the one construct
+where the rule above is wrong, and following it would print them as stray paragraphs.
+
+GFM puts definitions at the *bottom* of the document as separate top-level blocks
+(`Tag::FootnoteDefinition`), referenced inline by `Event::FootnoteReference`. Typst is the other
+way round: `#footnote[...]` is **inline at the reference site**, and Typst places the note itself.
+
+So emit runs in two steps:
+
+1. Collect every `FootnoteDefinition` block into a map, keyed by label. These produce **no**
+   `Element`.
+2. When emitting a `FootnoteReference`, inline the matching definition's markup as
+   `#footnote[...]`.
+
+A reference with no matching definition renders as literal text (GFM's own behaviour). A
+definition never referenced is dropped, and — since that is a concession — recorded via
+`UnsupportedConstruct` rather than silently discarded.
+
+**Verified:** `#footnote[...]` compiles and measures in **both** the ProbePass and the RenderPass,
+including inside a table cell. It is safe in the measure-only harness despite being a page-level
+construct.
+
+#### Verified since this plan was written *(2026-08-18)*
+
+Two assumptions were tested with a throwaway harness rather than trusted:
+
+- **Block markup is *not* position-sensitive inside `[...]`.** `= Heading`, `- list`, `+ enum`,
+  and `/ term` all render identically raw at top level and inside a content block — the markers
+  are consumed as markup in both. The §1.1 invariant holds for structural markup, not just prose.
+- **Links, task-list checkbox glyphs (`☐`/`☑`), and escaped brackets inside table cells** all
+  compile and render correctly in both passes.
 
 ### 2.5 `images.rs` — resolution only, never reading
 
@@ -187,7 +221,30 @@ here so the two halves meet:
 - Typeset gains a virtual-file map in `TypstWorld` that `World::file()` serves from.
 
 Recommended split: **Stage 1 — every text construct, end to end. Stage 2 — images**, once the World
-file map exists. Stage 1 delivers a working md→PDF pipeline for the majority of documents.
+file map exists.
+
+#### Correction: a missing file is a hard compile failure, not a skipped element *(2026-08-18)*
+
+The paragraph above originally claimed Stage 1 "delivers a working pipeline for the majority of
+documents." **That was wrong, and testing it is what showed why:**
+
+```
+image local   probe    ERR typst compilation failed: file not found (searched at diagram.png)
+image local   render   ERR typst compilation failed: file not found (searched at diagram.png)
+```
+
+Typst treats an unresolvable file as a **compilation error for the whole document**, not as a
+degraded element. So with no World file map, one `![](diagram.png)` anywhere means **no PDF at
+all** — not a document with a missing picture. Images are common enough in real markdown that this
+would have made Stage 1 useless on exactly the documents most likely to be tried first.
+
+**Therefore `emit` must never produce `#image(...)` in Stage 1.** Every image becomes a **visible
+placeholder** — a bordered box carrying the alt text — plus a `Compromise`, which is precisely the
+shape D4 already approved for remote images. The placeholder path is a permanent capability
+(it is what missing and remote images use forever), so this is not throwaway work.
+
+`#image(...)` appears only in **T9**, once `World::file()` can serve bytes. Until then the
+placeholder is the only image output, and Stage 1 genuinely does convert every document.
 
 ---
 
@@ -215,7 +272,7 @@ else is validated against. TDD throughout, per CLAUDE.md — tests alongside or 
 |---|---|---|---|
 | **T5** | **`escape.rs` + round-trip harness** | Typst-safe text emission; the escape set derived empirically | Round-trip property over adversarial corpus; the `#let` injection case |
 | **T6** | **`parse.rs` + `classify.rs`** | events → top-level block stream; construct → class | Nesting fold (code-in-list, table-in-quote); exhaustive per-construct class table; `order` uniqueness |
-| **T7** | **`emit.rs`** | block stream → `Vec<Element>` with valid bodies | Golden markup per construct; **both-positions compile test** (§1.1); no-trailing-spacing |
+| **T7** | **`emit.rs`** + **D1** | block stream → `Vec<Element>` with valid bodies; image placeholders; footnote absorption; `CompromiseKind::UnsupportedConstruct` added to the domain | Golden markup per construct; **both-positions compile test** (§1.1); no-trailing-spacing; `order` uniqueness |
 | **T8** | **`lib.rs` public API** | `convert()` → `Conversion { elements, compromises }` | Full-document fixtures end-to-end through the real `Typesetter` |
 | **T9** | **`images.rs`** *(Stage 2, gated)* | resolution + policy + manifest, `ImageProbe` injected | Stub-probe cases: resolved / missing / remote; path-escape refusal |
 
@@ -232,6 +289,11 @@ convert's correctness tests in the wrong crate. Recommend the dev-dependency.
 ## 6. Decisions for the gate
 
 These change what gets built. They are yours, not mine.
+
+> **All five decisions were approved on 2026-08-18.** They are kept here as the record of what was
+> decided and why. One ordering correction: **D1 lands in T7, not T8** — `emit` is the only place
+> that knows a construct was unsupported, and once events are flattened into markup that
+> information is gone.
 
 **D1 · How is an unsupported construct recorded?**
 No `CompromiseKind` variant exists for it, though `UnsupportedConstructEncountered` is a domain event.

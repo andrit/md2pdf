@@ -16,14 +16,22 @@ pub struct Compromise {
     pub page: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompromiseKind {
-    ShrunkToFloor { size_pt: f64 },
+    ShrunkToFloor {
+        size_pt: f64,
+    },
     Rotated,
     Clipped,
     ImageSkipped,
     ImageMissing,
+    /// A markdown construct md2pdf cannot represent, named so the attention gate can
+    /// say *which*. Raised at conversion time, before any Typst compilation exists —
+    /// unlike the ladder rungs above, which come from the ProbePass.
+    UnsupportedConstruct {
+        construct: String,
+    },
 }
 
 /// Every Compromise recorded during one Compilation. Sealed when the ProbePass

@@ -26,6 +26,14 @@ serde         = { version = "1", features = ["derive"] }
 serde_json    = "1"
 thiserror     = "2"
 
+# Full debuginfo made the linker run out of memory. Each test binary statically links
+# ~250 crates of the typst graph, and linking several at once got `ld` killed by the
+# OOM killer (signal 9) — intermittently, so it looked like a flake before it was
+# traced. Line tables keep backtraces and panic locations, which is all the tests need,
+# and cut linker memory enough that the workspace builds in parallel again.
+[profile.dev]
+debug = "line-tables-only"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
