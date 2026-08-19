@@ -40,4 +40,4 @@ support and feature requests** — the mechanism generalises well beyond this wo
 ## Open items
 
 <!-- Add a line per proposal, newest last. -->
-_None yet._
+- [001](001-custom-projects-have-no-phase-machine.md) — **open** · `custom` projects seed zero SDLC phases so progress cannot be recorded, and `task_list` errors on every call.

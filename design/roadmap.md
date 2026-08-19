@@ -34,6 +34,33 @@ iteratively"**, which is where the project sits; steps 0–2 are complete.
 
 ---
 
+## Task ledger
+
+Every numbered task, so completed work has a status row rather than only a prose mention.
+Detail lives in the phase plans; this is the index.
+
+| Task | What | Phase | State |
+|---|---|---|---|
+| T1 | Typst anti-corruption layer (`md2pdf-typeset`) | 2 | ✅ `1f5ca8d` |
+| T2 | 11 behavioural contract tests pinning Typst | 2 | ✅ `1f5ca8d` |
+| T3 | Version pinning `=0.15.1`; boundary + verify scripts | 2 | ✅ `1f5ca8d` |
+| T4 | Typst upgrade runbook (`docs/typst-upgrade.md`) | 2 | ✅ `1f5ca8d` |
+| T5 | `escape.rs` + compiler round-trip harness | 3a | ✅ `da2b622` |
+| T6 | `parse.rs` + `classify.rs` | 3a | ✅ `901d127` |
+| T7 | `emit.rs` + D1 (`UnsupportedConstruct`) | 3a | ✅ `5c87621` |
+| T8 | `convert()` public API + `Conversion` type | 3a | ✅ `2316aab` |
+| — | Italic faces + `text_runs()` styling oracle | 3a | ✅ `105ca2e` |
+| T9 | *(superseded — split into T10–T13)* | 3b | — |
+| T10 | `World` file map in `md2pdf-typeset` | 3b | ☐ next |
+| T11 | `images.rs` — resolution, probe, virtual naming | 3b | ☐ |
+| T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ☐ |
+| T13 | Escalation ladder on real images | 3b | ☐ |
+
+Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
+numbering reflects decisions actually made rather than a guess at future shape.
+
+---
+
 ## Phase status
 
 | Phase | Name | State | Gate |
