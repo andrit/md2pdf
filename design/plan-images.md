@@ -87,8 +87,12 @@ engine   →  reads bytes via md2pdf-paths (the only crate permitted to)
 typeset  →  Typesetter::add_file(virtual_name, bytes) before probe/render
 ```
 
-`ImageManifest` is plain data (`Vec<(String, PathBuf)>` or a map) and lives in `md2pdf-domain`, so
-convert can produce it without depending on paths or typeset. **No crate boundary moves.**
+`ImageManifest` is plain data and **no crate boundary moves**.
+
+> **Superseded by T12(b), 2026-08-19:** this originally placed the type in `md2pdf-domain`. It lives
+> in `md2pdf-convert` beside `Conversion` instead — nothing below convert needs it, so putting it in
+> the shared vocabulary would widen the domain for a single consumer. Shape settled as a
+> `BTreeMap<String, PathBuf>`, for dedup by construction and deterministic ordering.
 
 ### I4 · Image sizing and the ladder
 
@@ -185,6 +189,99 @@ remote, unsupported extension, no extension, `data:` URI, percent-encoded name, 
 stripping, absolute path, traversal **succeeding**, same basename in two directories producing
 **different** virtual names, the same path producing an **identical** name across runs (stability
 matters — an unstable name defeats memoisation on recompile).
+
+---
+
+## T12 in detail — wiring it through *(planned 2026-08-19)*
+
+T11 built the resolver; nothing calls it. T12 is the plumbing, and it is the task that
+**changes a shipped public API**, so the decisions are about blast radius as much as design.
+
+### The shape
+
+```rust
+pub struct SourceContext<'a> {
+    /// Directory of the Source. `None` when no file backs the markdown.
+    pub source_dir: Option<&'a Path>,
+    pub images: &'a dyn ImageProbe,
+}
+
+impl SourceContext<'_> {
+    /// No filesystem: every image degrades to a placeholder. Stage 1 behaviour.
+    pub fn none() -> Self { … }
+}
+
+pub fn convert(markdown: &str, ctx: &SourceContext) -> Conversion
+
+pub struct Conversion {
+    pub elements: Vec<Element>,
+    pub compromises: Vec<Compromise>,
+    pub images: ImageManifest,   // NEW — virtual name → absolute path
+}
+```
+
+### Decisions
+
+**(a) One entry point, not two.** The alternative is keeping `convert(&str)` as a convenience
+wrapper over `convert_in(&str, &SourceContext)`. Rejected: T8 declared `convert()` "the crate's
+whole public surface", and two ways to start a conversion invites the filesystem-less one to be
+chosen by accident — silently degrading every image in a document that had real ones.
+
+`SourceContext::none()` makes "I have no filesystem" **explicit at the call site**, which is the
+property worth having. Cost is 9 call sites and the doctest, all mechanical.
+
+**(b) `ImageManifest` lives in `md2pdf-convert`, beside `Conversion` — not in the domain.**
+I3 originally said domain. Revisited: nothing *below* convert needs the type. `md2pdf-paths`
+receives a `&Path`, not a manifest; `md2pdf-typeset` receives a name and bytes. Only the engine
+consumes it, and the engine already depends on convert. Widening the shared vocabulary for a single
+consumer is the wrong trade.
+
+Shape: a `BTreeMap<String, PathBuf>`. The map deduplicates by construction (one file referenced
+twice is stored once), and `BTree` ordering makes the manifest **deterministic**, which matters
+because tests compare it and batch conversions should not vary run to run.
+
+**(c) Compromises become specific — a behaviour change.** Today every image emits
+`UnsupportedConstruct { construct: "image: d.png" }`, because Stage 1 had no better information.
+Now:
+
+| `ImageRef` | Compromise | Emitted |
+|---|---|---|
+| `Resolved` | none | `#image("img-<hash>.<ext>")` |
+| `Missing` | `ImageMissing` | placeholder naming the file |
+| `Remote` | `ImageSkipped` | placeholder naming the URL |
+| `Unsupported` | `UnsupportedConstruct { construct }` carrying the `why` | placeholder |
+
+`ImageMissing` and `ImageSkipped` have existed in `CompromiseKind` since the domain was written and
+have never been constructed. This is where they start being true.
+
+**(d) Alt text is dropped once an image resolves.** It is a fallback, and GitHub shows the picture
+rather than the text. It stays in the placeholder, where it is the only thing left to show. A PDF
+has no alt-text channel to put it in, so nothing is lost that could have been kept.
+
+**(e) `emit` takes the context and returns the manifest.** `emit(&[Block], &SourceContext) ->
+Emitted { elements, compromises, images }`. The `Emitter` already accumulates `unsupported`; it
+gains a manifest accumulator alongside.
+
+### A test whose premise expires
+
+`emit::tests::images_become_placeholders_never_image_calls` asserts **"Stage 1 must not emit
+`#image`"**. That was correct and is about to become false: a *resolved* image must emit exactly
+that. The test is not deleted — it is **narrowed** to the claim that survives:
+
+> an image that does **not** resolve never emits `#image`
+
+which is still the property protecting the document from a whole-compilation failure. Flagged here
+because silently deleting a failing test is how a real guarantee gets lost.
+
+### Tests
+
+- Resolved image: markup contains `#image("img-…")`, manifest has one entry, **no** compromise.
+- Missing / remote / unsupported: placeholder, no `#image`, exactly one compromise of the right kind.
+- One image referenced twice: **one** manifest entry, two `#image` calls.
+- Two different images: two entries.
+- `SourceContext::none()`: unchanged Stage 1 behaviour across the whole corpus.
+- End to end with `md2pdf-typeset`: feed the manifest through `add_file`, compile, confirm the PDF
+  contains the image — and **look at the page**, since scale and placement pass assertions blind.
 
 ---
 
