@@ -5,5 +5,6 @@
 //! linking two at once got `ld` killed by the OOM killer on a 4 GB machine. One entry
 //! point keeps the link count down without giving up the separation of concerns.
 
+mod api;
 mod emission;
 mod escaping;

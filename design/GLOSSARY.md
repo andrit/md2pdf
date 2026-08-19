@@ -32,6 +32,17 @@ Typst markup emitted from a parsed Source. Text, not a Typst object.
 - **Type:** `Markup` · Produced by the Conversion context
 - ⚠️ NOT "typst source", "intermediate", or "IR"
 
+### Conversion
+The result of converting one Source: its **Elements**, plus the **Compromises** already made —
+an unsupported construct, a skipped image — *before* any Typst compilation exists.
+- **Type:** `Conversion` · Produced by `convert()`, the Conversion context's whole public surface
+- **Total:** conversion cannot fail. An unrepresentable construct becomes a Compromise, never an
+  error, so there is no `ConversionError`
+- Parallels **Compilation**: each names what a context produced, and each carries its concessions
+  with it rather than discarding them
+- ⚠️ NOT "parse result", "output", or "IR". The *context* is also called Conversion; the type is
+  what the context returns
+
 ### Compilation
 The result of running Typst over Markup with a Template: paged output **plus its Diagnostic**.
 Always **two passes** — see ProbePass and RenderPass.
