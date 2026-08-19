@@ -5,10 +5,12 @@
 //! rather than inferring structure back out of typst's tree.
 //!
 //! No I/O. Image paths are *resolved* here but never *read*; reading is
-//! `md2pdf-paths`' job.
+//! `md2pdf-paths`' job, and existence arrives through an injected [`ImageProbe`].
 //!
 //! ```
-//! let conversion = md2pdf_convert::convert("# Title\n\nSome *prose*.\n");
+//! use md2pdf_convert::{convert, SourceContext};
+//!
+//! let conversion = convert("# Title\n\nSome *prose*.\n", &SourceContext::none());
 //! assert_eq!(conversion.elements.len(), 2);
 //! assert!(!conversion.is_flagged());
 //! ```
@@ -24,21 +26,77 @@ pub mod images;
 // pulldown-cmark -> internal event stream
 pub mod parse;
 
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
 use md2pdf_domain::{Compromise, Element};
+
+pub use images::{ImageProbe, NoImages};
+
+/// Every image the document referenced and md2pdf resolved: **virtual name → the file
+/// on disk**.
+///
+/// The seam between three crates that each may do only their own part — convert cannot
+/// read bytes, typeset cannot touch the filesystem, and only `md2pdf-paths` may. The
+/// engine walks this map, reads each file through the broker, and hands the bytes to
+/// `Typesetter::add_file` under the same name the markup references.
+///
+/// A `BTreeMap` for two reasons: one file referenced twice collapses to one entry, and
+/// iteration order is deterministic, so a batch produces the same work in the same
+/// order every run.
+pub type ImageManifest = BTreeMap<String, PathBuf>;
+
+/// What the world looks like from the Source's point of view.
+///
+/// Conversion stays pure by taking a *description* of its surroundings rather than
+/// reaching for them: the directory to resolve relative paths against, and a probe that
+/// answers whether a file exists.
+pub struct SourceContext<'a> {
+    /// Directory of the Source. `None` when no file backs the markdown — stdin, a
+    /// scratch buffer, a test.
+    pub source_dir: Option<&'a Path>,
+    pub images: &'a dyn ImageProbe,
+}
+
+impl SourceContext<'_> {
+    /// No filesystem at all: every image degrades to a visible placeholder.
+    ///
+    /// Deliberately explicit. There is no `convert(markdown)` shortcut, because a
+    /// caller that meant to pass a real context and silently got this one would see
+    /// every image in the document quietly become a placeholder — a failure that looks
+    /// like success.
+    pub fn none() -> Self {
+        Self {
+            source_dir: None,
+            images: &NoImages,
+        }
+    }
+}
+
+impl<'a> SourceContext<'a> {
+    pub fn new(source_dir: &'a Path, images: &'a dyn ImageProbe) -> Self {
+        Self {
+            source_dir: Some(source_dir),
+            images,
+        }
+    }
+}
 
 /// The result of converting one Source: its Elements, plus the Compromises already
 /// made — before any Typst compilation exists. See `design/GLOSSARY.md`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Conversion {
     pub elements: Vec<Element>,
-    /// Concessions made during conversion — an unsupported construct, a skipped
-    /// image. Every one names an Element in `elements`, so the attention gate can
-    /// offer an adjustment for it.
+    /// Concessions made during conversion — an unsupported construct, a missing or
+    /// remote image. Every one names an Element in `elements`, so the attention gate
+    /// can offer an adjustment for it.
     ///
     /// These are **not** the ProbePass's compromises. Merging the two into one sealed
     /// `Diagnostic` is the engine's job; a Compromise from here carries `page: None`
     /// because pagination has not happened yet.
     pub compromises: Vec<Compromise>,
+    /// Files the engine must read and register before compiling.
+    pub images: ImageManifest,
 }
 
 impl Conversion {
@@ -60,10 +118,11 @@ impl Conversion {
 ///
 /// Templates are not involved. Conversion decides *what* the elements are; the
 /// Template decides what they look like, and the ProbePass decides what fits.
-pub fn convert(markdown: &str) -> Conversion {
-    let emitted = emit::emit(&parse::parse(markdown));
+pub fn convert(markdown: &str, ctx: &SourceContext) -> Conversion {
+    let emitted = emit::emit(&parse::parse(markdown), ctx);
     Conversion {
         elements: emitted.elements,
         compromises: emitted.compromises,
+        images: emitted.images,
     }
 }

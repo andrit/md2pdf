@@ -53,8 +53,8 @@ Detail lives in the phase plans; this is the index.
 | T9 | *(superseded — split into T10–T13)* | 3b | — |
 | T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ staged |
 | T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ staged |
-| T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ☐ next |
-| T13 | Escalation ladder on real images | 3b | ☐ |
+| T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ staged |
+| T13 | Escalation ladder on real images | 3b | ☐ next |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.

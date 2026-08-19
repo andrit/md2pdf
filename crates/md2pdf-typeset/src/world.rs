@@ -77,8 +77,13 @@ impl TypstWorld {
         }
     }
 
-    /// Drop every registered file. Called between Jobs so one document's images can
-    /// never be served to another, and so a long batch does not accumulate them.
+    /// Drop every registered file. Call **between Jobs, not between Sources.**
+    ///
+    /// The reason is memory, not correctness. Sharing files across the documents of one
+    /// batch is *desirable*: virtual names are derived from the resolved absolute path,
+    /// so two Sources referencing the same logo produce the same name for the same
+    /// bytes. Clearing per Source would re-register that logo for every document in the
+    /// batch and throw away the `comemo` hit this long-lived `World` exists to keep.
     pub fn clear_files(&self) {
         self.files.borrow_mut().clear();
     }

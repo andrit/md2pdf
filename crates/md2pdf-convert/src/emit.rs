@@ -29,21 +29,25 @@ use md2pdf_domain::{Compromise, CompromiseKind, Element, Markup};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Tag, TagEnd};
 
 use crate::escape::{escape, escape_string};
+use crate::images::{resolve, ImageRef};
 use crate::parse::Block;
+use crate::{ImageManifest, SourceContext};
 
 /// Everything one conversion produced: the elements, and the concessions made.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Emitted {
     pub elements: Vec<Element>,
     pub compromises: Vec<Compromise>,
+    /// Every image that resolved, keyed by the virtual name the markup references.
+    pub images: ImageManifest,
 }
 
 /// Emit every block, in source order.
 ///
 /// Footnote definitions produce no `Element` — they are absorbed into the element that
 /// references them (§2.4). Everything else becomes exactly one.
-pub fn emit(blocks: &[Block<'_>]) -> Emitted {
-    let footnotes = collect_footnotes(blocks);
+pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
+    let footnotes = collect_footnotes(blocks, ctx);
     let mut out = Emitted::default();
     let mut order = 0u32;
 
@@ -52,8 +56,10 @@ pub fn emit(blocks: &[Block<'_>]) -> Emitted {
             continue;
         }
         let mut em = Emitter {
+            ctx,
             footnotes: &footnotes,
-            unsupported: Vec::new(),
+            pending: Vec::new(),
+            images: ImageManifest::new(),
             in_header: false,
         };
         let body = em.sequence(&mut block.events.iter().peekable(), None);
@@ -66,7 +72,7 @@ pub fn emit(blocks: &[Block<'_>]) -> Emitted {
         // vanish AND the record of it vanishing would too. A Compromise needs an
         // ElementId to be addressable at the attention gate, so it needs an Element.
         if body.is_empty() {
-            if em.unsupported.is_empty() {
+            if em.pending.is_empty() {
                 continue;
             }
             body = placeholder("unsupported content");
@@ -77,13 +83,14 @@ pub fn emit(blocks: &[Block<'_>]) -> Emitted {
         // `order` alone, and a duplicate would silently bind a decision to the wrong
         // element. See the plan, §1.2.
         let element = Element::new(order, block.class, Markup::raw(body));
-        for construct in em.unsupported {
+        for kind in em.pending {
             out.compromises.push(Compromise {
                 id: element.id,
-                kind: CompromiseKind::UnsupportedConstruct { construct },
+                kind,
                 page: None,
             });
         }
+        out.images.extend(em.images);
         out.elements.push(element);
         order += 1;
     }
@@ -103,7 +110,7 @@ fn is_footnote_definition(block: &Block<'_>) -> bool {
 /// GFM puts definitions at the bottom as separate blocks; Typst wants `#footnote[..]`
 /// inline at the reference. So definitions are rendered once, up front, and spliced in
 /// wherever they are referenced.
-fn collect_footnotes(blocks: &[Block<'_>]) -> HashMap<String, String> {
+fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for block in blocks {
         let Some(Event::Start(Tag::FootnoteDefinition(label))) = block.events.first() else {
@@ -112,8 +119,10 @@ fn collect_footnotes(blocks: &[Block<'_>]) -> HashMap<String, String> {
         // Definitions may reference other footnotes; those resolve to literal text
         // rather than recursing, which is GFM's own behaviour for an unresolved ref.
         let mut em = Emitter {
+            ctx,
             footnotes: &HashMap::new(),
-            unsupported: Vec::new(),
+            pending: Vec::new(),
+            images: ImageManifest::new(),
             in_header: false,
         };
         let inner = em.sequence(&mut block.events.iter().peekable(), None);
@@ -123,8 +132,12 @@ fn collect_footnotes(blocks: &[Block<'_>]) -> HashMap<String, String> {
 }
 
 struct Emitter<'m> {
+    ctx: &'m SourceContext<'m>,
     footnotes: &'m HashMap<String, String>,
-    unsupported: Vec<String>,
+    /// Compromises for the block being emitted; the Element id is attached once the
+    /// body is known.
+    pending: Vec<CompromiseKind>,
+    images: ImageManifest,
     /// Table header cells render bold, as GitHub does.
     in_header: bool,
 }
@@ -165,17 +178,17 @@ impl Emitter<'_> {
                 // so passing one through is not a concession worth reporting.
                 Event::Html(h) => {
                     if !is_html_comment(h) {
-                        self.unsupported.push(format!("html: {}", h.trim()));
+                        self.unsupported(format!("html: {}", h.trim()));
                         out.push_str(&placeholder("unsupported html"));
                     }
                 }
                 Event::InlineHtml(h) => {
                     if !is_html_comment(h) {
-                        self.unsupported.push(format!("inline html: {}", h.trim()));
+                        self.unsupported(format!("inline html: {}", h.trim()));
                     }
                 }
                 Event::InlineMath(_) | Event::DisplayMath(_) => {
-                    self.unsupported.push("math".to_string());
+                    self.unsupported("math".to_string());
                 }
             }
         }
@@ -256,12 +269,12 @@ impl Emitter<'_> {
             }
             Tag::Image { dest_url, .. } => {
                 let alt = self.sequence(events, Some(end));
-                self.image_placeholder(dest_url, alt.trim())
+                self.image(dest_url, alt.trim())
             }
             Tag::FootnoteDefinition(_) => self.sequence(events, Some(end)),
             // Enabled-but-unmodelled, and anything a future option turns on.
             other => {
-                self.unsupported.push(format!("{other:?}"));
+                self.unsupported(format!("{other:?}"));
                 self.sequence(events, Some(end))
             }
         }
@@ -309,16 +322,63 @@ impl Emitter<'_> {
         }
     }
 
-    /// Stage 1: never `#image(...)`. See the module docs.
-    fn image_placeholder(&mut self, dest: &str, alt: &str) -> String {
-        self.unsupported.push(format!("image: {dest}"));
-        let caption = if alt.is_empty() {
-            escape(dest)
-        } else {
-            alt.to_string()
-        };
-        format!("#box(stroke: 0.5pt, inset: 6pt)[#emph[image:] {caption}]")
+    fn unsupported(&mut self, construct: String) {
+        self.pending
+            .push(CompromiseKind::UnsupportedConstruct { construct });
     }
+
+    /// Resolve an image, or degrade visibly and say why.
+    ///
+    /// `#image(..)` is emitted **only** for a path that resolved and was recorded in
+    /// the manifest. Emitting one Typst cannot satisfy fails the *whole document*, not
+    /// one element — which is the failure this arm exists to prevent.
+    ///
+    /// Alt text is dropped once an image resolves: it is a fallback, a PDF has no
+    /// alt-text channel, and GitHub shows the picture rather than the words. It stays
+    /// in the placeholder, where it is the only thing left to show.
+    fn image(&mut self, dest: &str, alt: &str) -> String {
+        match resolve(dest, self.ctx.source_dir, self.ctx.images) {
+            ImageRef::Resolved {
+                virtual_name,
+                absolute,
+            } => {
+                // Wrapped in a `box` so the image is **inline-level**. A bare
+                // `#image(..)` is block-level in Typst and forces a line break, which
+                // splits "text ![x](y.png) more" across three lines — GitHub keeps it
+                // on one. A lone image in its own paragraph renders identically either
+                // way, so the box is always correct and never costs anything.
+                let markup = format!("#box(image(\"{}\"))", escape_string(&virtual_name));
+                self.images.insert(virtual_name, absolute);
+                markup
+            }
+            ImageRef::Missing { shown } => {
+                self.pending.push(CompromiseKind::ImageMissing);
+                image_placeholder("image not found", &shown, alt)
+            }
+            ImageRef::Remote { shown } => {
+                self.pending.push(CompromiseKind::ImageSkipped);
+                image_placeholder("remote image skipped", &shown, alt)
+            }
+            ImageRef::Unsupported { shown, why } => {
+                self.unsupported(format!("image ({why}): {shown}"));
+                image_placeholder(why, &shown, alt)
+            }
+        }
+    }
+}
+
+/// A visible marker for an image that could not be embedded, naming both the reason
+/// and the file so the page and the diagnostic agree.
+fn image_placeholder(why: &str, shown: &str, alt: &str) -> String {
+    let caption = if alt.is_empty() {
+        escape(shown)
+    } else {
+        escape(alt)
+    };
+    format!(
+        "#box(stroke: 0.5pt, inset: 6pt)[#emph[{}:] {caption}]",
+        escape(why)
+    )
 }
 
 /// A visible marker for content md2pdf could not render. Used for images (Stage 1)
@@ -375,10 +435,11 @@ fn code_block(kind: &CodeBlockKind<'_>, code: &str) -> String {
 mod tests {
     use super::*;
     use crate::parse::parse;
+    use crate::SourceContext;
     use md2pdf_domain::ElementClass;
 
     fn run(md: &str) -> Emitted {
-        emit(&parse(md))
+        emit(&parse(md), &SourceContext::none())
     }
 
     fn bodies(md: &str) -> Vec<String> {
@@ -445,19 +506,79 @@ mod tests {
     }
 
     #[test]
-    fn images_become_placeholders_never_image_calls() {
-        // Emitting `#image` would fail the WHOLE compilation, not just this element.
+    fn an_unresolved_image_never_emits_an_image_call() {
+        // The failure guard. A file reference Typst cannot satisfy fails the WHOLE
+        // document — not one element — so an unresolved image must never produce
+        // `#image`. Stated as the invariant rather than as Stage-1 behaviour, because
+        // the invariant is what survives images becoming resolvable.
         let out = run("![a diagram](d.png)");
-        let b = &out.elements[0].body.as_str().to_string();
-        assert!(!b.contains("#image("), "Stage 1 must not emit #image: {b}");
-        assert!(b.contains("a diagram"), "alt text lost: {b}");
+        let b = out.elements[0].body.as_str();
+        assert!(
+            !b.contains("#image("),
+            "unresolved image emitted #image: {b}"
+        );
+        assert!(
+            b.contains("a diagram"),
+            "alt text lost from placeholder: {b}"
+        );
+        assert!(
+            out.images.is_empty(),
+            "nothing resolved, so nothing to register"
+        );
         assert!(
             out.compromises
                 .iter()
-                .any(|c| matches!(&c.kind, CompromiseKind::UnsupportedConstruct { construct } if construct.contains("d.png"))),
-            "no compromise recorded: {:?}",
+                .any(|c| c.kind == CompromiseKind::ImageMissing),
+            "no ImageMissing recorded: {:?}",
             out.compromises
         );
+    }
+
+    #[test]
+    fn every_emitted_image_call_is_backed_by_the_manifest() {
+        // The strong form of the guard, as a property: whatever the document, every
+        // `#image("name")` md2pdf emits must be a name the engine will register.
+        for md in [
+            "![a](x.png)",
+            "text ![b](y.jpg) more",
+            "![c](https://x.test/z.png)",
+            "![d](data:image/png;base64,AAA)",
+            "no images at all",
+        ] {
+            let out = run(md);
+            for el in &out.elements {
+                for name in image_names(el.body.as_str()) {
+                    assert!(
+                        out.images.contains_key(&name),
+                        "{md:?}: emitted #image({name:?}) with no manifest entry"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every `#image("…")` name in a body.
+    fn image_names(body: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        let mut rest = body;
+        while let Some(i) = rest.find("#image(\"") {
+            rest = &rest[i + 8..];
+            if let Some(end) = rest.find('"') {
+                names.push(rest[..end].to_string());
+                rest = &rest[end..];
+            }
+        }
+        names
+    }
+
+    #[test]
+    fn a_remote_image_is_skipped_and_recorded() {
+        let out = run("![alt](https://x.test/a.png)");
+        assert!(out
+            .compromises
+            .iter()
+            .any(|c| c.kind == CompromiseKind::ImageSkipped));
+        assert!(out.images.is_empty());
     }
 
     #[test]

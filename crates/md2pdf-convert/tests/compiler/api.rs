@@ -3,7 +3,7 @@
 //! The properties here are the ones callers are entitled to rely on. Construct-level
 //! behaviour is unit-tested next to the code; these are the contract.
 
-use md2pdf_convert::{convert, Conversion};
+use md2pdf_convert::{convert, Conversion, SourceContext};
 use md2pdf_domain::{ElementClass, Template};
 use md2pdf_typeset::Typesetter;
 
@@ -32,7 +32,7 @@ fn conversion_is_total_over_hostile_input() {
 
     for (name, input) in hostile {
         // The assertion is that this returns at all — no panic, no Result.
-        let c: Conversion = convert(input);
+        let c: Conversion = convert(input, &SourceContext::none());
         // And that whatever came back is internally consistent.
         assert_compromises_are_addressable(&c, name);
     }
@@ -55,7 +55,11 @@ fn assert_compromises_are_addressable(c: &Conversion, ctx: &str) {
 #[test]
 fn orders_are_unique_across_a_whole_document() {
     let md = "# A\n\np1\n\n- l\n\n> q\n\n```\nc\n```\n\n| h |\n|---|\n| v |\n\np2\n\n## B\n\np3\n";
-    let orders: Vec<u32> = convert(md).elements.iter().map(|e| e.id.order).collect();
+    let orders: Vec<u32> = convert(md, &SourceContext::none())
+        .elements
+        .iter()
+        .map(|e| e.id.order)
+        .collect();
 
     let mut unique = orders.clone();
     unique.sort_unstable();
@@ -69,7 +73,10 @@ fn orders_are_unique_across_a_whole_document() {
 
 #[test]
 fn elements_keep_source_order_and_class() {
-    let c = convert("# H\n\nprose\n\n| a |\n|---|\n| 1 |\n\n```\ncode\n```\n");
+    let c = convert(
+        "# H\n\nprose\n\n| a |\n|---|\n| 1 |\n\n```\ncode\n```\n",
+        &SourceContext::none(),
+    );
     let classes: Vec<ElementClass> = c.elements.iter().map(|e| e.class).collect();
     assert_eq!(
         classes,
@@ -84,7 +91,10 @@ fn elements_keep_source_order_and_class() {
 
 #[test]
 fn a_clean_document_is_not_flagged() {
-    let c = convert("# Title\n\nOrdinary *prose* with `code`.\n");
+    let c = convert(
+        "# Title\n\nOrdinary *prose* with `code`.\n",
+        &SourceContext::none(),
+    );
     assert!(
         !c.is_flagged(),
         "unexpected compromises: {:?}",
@@ -95,7 +105,7 @@ fn a_clean_document_is_not_flagged() {
 #[test]
 fn a_document_with_an_image_is_flagged() {
     // Stage 1 cannot embed images, and says so rather than failing silently.
-    let c = convert("![alt](d.png)\n");
+    let c = convert("![alt](d.png)\n", &SourceContext::none());
     assert!(c.is_flagged());
 }
 
@@ -105,6 +115,7 @@ fn a_converted_document_compiles_to_a_pdf() {
     let c = convert(
         "# Report\n\nProse with *emphasis* and a [link](https://x.test).\n\n\
          | Col | Val |\n|---|---|\n| a | 1 |\n\n```rust\nfn main() {}\n```\n",
+        &SourceContext::none(),
     );
     let template = Template::default();
     let ts = Typesetter::new();
@@ -129,7 +140,7 @@ fn a_converted_document_compiles_to_a_pdf() {
 /// crate's text-based tests could not see.
 #[test]
 fn emphasis_reaches_the_page_as_italic() {
-    let c = convert("Plain *slanted* plain.\n");
+    let c = convert("Plain *slanted* plain.\n", &SourceContext::none());
     let template = Template::default();
     let ts = Typesetter::new();
     let (map, _) = ts.probe(&c.elements, &template).expect("probe");

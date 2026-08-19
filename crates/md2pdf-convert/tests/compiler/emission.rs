@@ -9,7 +9,7 @@
 //! measurement. So all three are tested, on a corpus covering every construct md2pdf
 //! emits.
 
-use md2pdf_convert::{emit::emit, parse::parse};
+use md2pdf_convert::{emit::emit, parse::parse, SourceContext};
 use md2pdf_domain::{Decision, DecisionMap, Element, Rung, Template};
 use md2pdf_typeset::Typesetter;
 
@@ -76,7 +76,7 @@ fn template() -> Template {
 }
 
 fn elements() -> Vec<Element> {
-    let out = emit(&parse(CORPUS));
+    let out = emit(&parse(CORPUS), &SourceContext::none());
     assert!(!out.elements.is_empty(), "corpus produced no elements");
     out.elements
 }
@@ -180,7 +180,7 @@ fn front_matter_and_hostile_text_survive_correctly() {
 
 #[test]
 fn every_concession_is_recorded_and_addressable() {
-    let out = emit(&parse(CORPUS));
+    let out = emit(&parse(CORPUS), &SourceContext::none());
     assert!(
         !out.compromises.is_empty(),
         "the corpus has an image and raw html; both are concessions"
