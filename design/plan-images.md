@@ -262,16 +262,32 @@ has no alt-text channel to put it in, so nothing is lost that could have been ke
 Emitted { elements, compromises, images }`. The `Emitter` already accumulates `unsupported`; it
 gains a manifest accumulator alongside.
 
-### A test whose premise expires
+### The failure guard, restated at the level it actually operates
 
 `emit::tests::images_become_placeholders_never_image_calls` asserts **"Stage 1 must not emit
-`#image`"**. That was correct and is about to become false: a *resolved* image must emit exactly
-that. The test is not deleted — it is **narrowed** to the claim that survives:
+`#image`"**, and that becomes false in T12 — a resolved image must emit exactly that.
 
-> an image that does **not** resolve never emits `#image`
+But it was never a test of Stage 1 behaviour. It is a **failure guard**, and the failure it guards
+against is total: a file reference Typst cannot satisfy fails the **whole document**, so the output
+is not a PDF with a missing picture, it is no PDF at all.
 
-which is still the property protecting the document from a whole-compilation failure. Flagged here
-because silently deleting a failing test is how a real guarantee gets lost.
+So the invariant it protects was never "do not emit `#image`". That was a *proxy*, exact in Stage 1
+only because the satisfiable set was empty. The real invariant does not change in T12:
+
+> **never emit a file reference md2pdf cannot satisfy**
+
+State it that way and the test gets **stronger**, not narrower:
+
+> every `#image("name")` in the emitted markup has a matching entry in the `ImageManifest`
+
+Vacuously true in Stage 1 (no `#image` at all), meaningfully true in Stage 2, and it catches what
+neither phrasing would — a resolved image whose manifest entry is dropped, or a name that disagrees
+between emission and manifest. Those are precisely the mistakes this task's plumbing can introduce,
+and each one fails the whole document.
+
+**This becomes a property assertion over the whole corpus**, not a single case: extract every
+`#image("…")` name from every emitted element and require it in the manifest. Cheap, and it holds
+for free in every future test that converts anything.
 
 ### Tests
 
@@ -280,6 +296,9 @@ because silently deleting a failing test is how a real guarantee gets lost.
 - One image referenced twice: **one** manifest entry, two `#image` calls.
 - Two different images: two entries.
 - `SourceContext::none()`: unchanged Stage 1 behaviour across the whole corpus.
+- **Manifest coverage, as a property over the whole corpus:** every `#image("…")` name emitted
+  appears in the manifest. This is the failure guard above, and the one assertion that must never be
+  weakened.
 - End to end with `md2pdf-typeset`: feed the manifest through `add_file`, compile, confirm the PDF
   contains the image — and **look at the page**, since scale and placement pass assertions blind.
 
