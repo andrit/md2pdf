@@ -10,10 +10,23 @@ use crate::element::ElementId;
 pub enum Rung {
     /// Fits as-is, or is Wrappable and therefore cannot overflow.
     None,
-    /// Stepped down to `size_pt`, which is at or above the class Floor.
+    /// Text stepped down to `size_pt`, at or above the class Floor.
+    ///
+    /// Font size only. Content that scales rather than reflows uses [`Rung::Scale`] —
+    /// "8pt" and "40%" are different facts, and the attention gate must not have to
+    /// reverse-engineer which one a number is.
     Shrink { size_pt: f64 },
+    /// Scaled by `factor` (0..1), at or above the class scale Floor.
+    ///
+    /// For classes where shrinking means resizing rather than restyling — images.
+    /// Applied with `reflow: true`, so the element really does occupy less space;
+    /// Typst's default scale is visual only and would leave the overflow in place.
+    Scale { factor: f64 },
     /// At the Floor and still over — goes to landscape on its own page.
-    /// The RenderPass re-measures there; it does NOT inherit the portrait size.
+    ///
+    /// The element renders at natural size there. It is **not** re-measured: the
+    /// RenderPass never measures, by design. An element too wide even for landscape
+    /// still overflows — see T14, "finish the ladder".
     Rotate,
     /// Still over after rotation. Clipped, with a visible marker.
     Clip,

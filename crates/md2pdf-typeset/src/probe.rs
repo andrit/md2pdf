@@ -35,10 +35,37 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
         let order = el.id.order;
         let floor = template.floors.for_class(el.class);
 
-        if el.class.is_atomic() {
-            // Linear scan in 0.5pt steps: ~7 measurements per atomic element, and it
-            // dominates probe cost. A binary search would cut it to ~3 — noted in the
-            // findings, not taken yet.
+        if el.class.is_atomic() && el.class.shrinks_by_scale() {
+            // Scaling content — images. Deciding this is arithmetic, not a search:
+            // the required factor is available/natural. The font-size ladder below
+            // cannot move an image at all (its width does not depend on text size),
+            // so running it here would measure the same number ~20 times and then
+            // fall through to Rotate. That was the bug T13 fixes.
+            write!(
+                s,
+                r#"  {{
+    let body = [{body}]
+    let natural = measure(body).width
+    let required = if natural > 0pt {{ {avail}pt / natural }} else {{ 1.0 }}
+    let rung = if required >= 1.0 {{ "none" }} else if required >= {floor} {{ "scale" }} else {{ "rotate" }}
+    [#metadata((
+      order: {order},
+      rung: rung,
+      size: 0.0,
+      factor: if required < 1.0 {{ required }} else {{ 1.0 }},
+      natural: natural.pt(),
+      available: {avail},
+    )) <d>]
+  }}
+"#,
+                body = el.body,
+                floor = template.floors.image_scale,
+            )
+            .expect("string write");
+        } else if el.class.is_atomic() {
+            // Text-bearing atomic content — tables. Linear scan in 0.5pt steps: ~7
+            // measurements per element, and it dominates probe cost. A binary search
+            // would cut it to ~3 — noted in the findings, not taken yet.
             write!(
                 s,
                 r#"  {{
@@ -55,6 +82,7 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
       order: {order},
       rung: rung,
       size: if chosen == none {{ 0.0 }} else {{ chosen.pt() }},
+      factor: 1.0,
       natural: natural.pt(),
       available: {avail},
     )) <d>]
@@ -75,6 +103,7 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
       order: {order},
       rung: "none",
       size: 0.0,
+      factor: 1.0,
       natural: measure(body).width.pt(),
       available: {avail},
     )) <d>]

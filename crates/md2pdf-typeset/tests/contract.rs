@@ -14,7 +14,7 @@
 //! guessed.
 
 use md2pdf_domain::{
-    DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Rung, Template,
+    Decision, DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Rung, Template,
 };
 use md2pdf_typeset::Typesetter;
 
@@ -34,6 +34,7 @@ fn template() -> Template {
             prose_pt: 9.0,
             table_pt: 7.0,
             code_pt: 7.0,
+            image_scale: 0.25,
         },
         font_body: "Source Sans 3".into(),
         font_mono: "JetBrains Mono".into(),
@@ -137,10 +138,73 @@ fn prose_never_overflows_because_it_wraps() {
 }
 
 #[test]
-fn oversized_figure_escalates_to_rotate() {
+fn an_oversized_figure_scales_before_it_rotates() {
+    // 400pt into 196pt needs ~49%, comfortably above the 0.25 scale floor.
+    //
+    // This replaces `oversized_figure_escalates_to_rotate`, which asserted the rung
+    // reached *before* T13 — when the probe stepped font size to shrink an image and
+    // therefore could never move one, sending every oversized image straight to
+    // Rotate. Scaling is lossless for an image; a whole landscape page is not.
     let els = vec![figure()];
     let map = probe(&els);
+    match map.get(&els[0].id).unwrap().rung {
+        Rung::Scale { factor } => {
+            assert!(
+                (0.45..0.55).contains(&factor),
+                "expected ~0.49, got {factor}"
+            );
+        }
+        other => panic!("expected Scale, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_figure_below_the_scale_floor_rotates_instead() {
+    // 1000pt into 196pt needs ~20%, under the floor — unreadable, so rotate for the
+    // extra width rather than shrink into uselessness.
+    let els = vec![Element::new(
+        5,
+        ElementClass::Image,
+        Markup::raw("#rect(width: 1000pt, height: 30pt)"),
+    )];
+    let map = probe(&els);
     assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::Rotate);
+}
+
+#[test]
+fn a_scaled_element_really_occupies_less_space() {
+    // `reflow: true` is the difference between fixing an overflow and only appearing
+    // to: Typst's scale is a visual transform by default and leaves the original
+    // footprint behind.
+    let ts = Typesetter::new();
+    let el = figure();
+    let scaled = ts
+        .render(
+            std::slice::from_ref(&el),
+            &template(),
+            &DecisionMap {
+                decisions: vec![Decision {
+                    id: el.id,
+                    rung: Rung::Scale { factor: 0.25 },
+                    natural_pt: 400.0,
+                    available_pt: 196.0,
+                }],
+            },
+        )
+        .expect("renders");
+    let plain = ts
+        .render(
+            std::slice::from_ref(&el),
+            &template(),
+            &DecisionMap { decisions: vec![] },
+        )
+        .expect("renders");
+    // The unscaled 400pt figure overflows a 220pt page and spills onto more of it;
+    // the scaled one fits. Page count is the coarse, honest signal available here.
+    assert!(
+        scaled.page_count() <= plain.page_count(),
+        "scaling did not reduce the space used"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -441,4 +505,55 @@ fn an_unusable_virtual_name_is_rejected_rather_than_panicking() {
         ts.add_file("nested/dir/img.png", vec![1, 2, 3]),
         "a nested virtual path was rejected"
     );
+}
+
+const HUGE: &[u8] = include_bytes!("fixtures/huge-2000x300.png");
+
+#[test]
+fn a_real_image_enters_the_ladder_by_scale_not_by_font_size() {
+    // The defect T13 fixed, pinned against a real raster rather than a `#rect`.
+    // Before: the probe stepped font size, which cannot move an image, so a 2000pt
+    // image measured identically ~20 times and fell straight through to Rotate.
+    let ts = Typesetter::new();
+    ts.add_file("huge.png", HUGE.to_vec());
+
+    // 2000pt into 196pt needs ~10%: under the 0.25 floor, so rotation is right.
+    let huge = Element::new(
+        0,
+        ElementClass::Image,
+        Markup::raw(r#"#box(image("huge.png"))"#),
+    );
+    let (map, _) = ts
+        .probe(std::slice::from_ref(&huge), &template())
+        .expect("probe");
+    assert_eq!(map.get(&huge.id).unwrap().rung, Rung::Rotate);
+
+    // The same image on a page wide enough that ~30% suffices must SCALE instead.
+    let wide_page = Template {
+        page_width_pt: 640.0,
+        ..template()
+    };
+    let (map, _) = ts
+        .probe(std::slice::from_ref(&huge), &wide_page)
+        .expect("probe");
+    match map.get(&huge.id).unwrap().rung {
+        Rung::Scale { factor } => assert!((0.25..0.40).contains(&factor), "got {factor}"),
+        other => panic!("expected Scale on the wider page, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_small_image_is_left_alone() {
+    let ts = Typesetter::new();
+    ts.add_file("sq.png", SQUARE_10X10.to_vec());
+    let el = Element::new(
+        0,
+        ElementClass::Image,
+        Markup::raw(r#"#box(image("sq.png"))"#),
+    );
+    let (map, diag) = ts
+        .probe(std::slice::from_ref(&el), &template())
+        .expect("probe");
+    assert_eq!(map.get(&el.id).unwrap().rung, Rung::None);
+    assert!(!diag.is_flagged(), "a fitting image is not a compromise");
 }

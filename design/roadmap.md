@@ -54,8 +54,8 @@ Detail lives in the phase plans; this is the index.
 | T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ staged |
 | T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ staged |
 | T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ staged |
-| T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ☐ next |
-| T14 | Finish the ladder — rotate+scale, `clip` finally emitted (all atomic classes) | 3b | ☐ |
+| T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ staged |
+| T14 | Finish the ladder — rotate+scale, `clip` finally emitted | **not image-specific** | ☐ next |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.

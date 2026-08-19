@@ -407,7 +407,7 @@ own task rather than riding along here. Recorded in the roadmap; the spike flagg
 | ✅ **T10** | **`World` file map** in `md2pdf-typeset` | `add_file`/`clear_files` on `TypstWorld` + `Typesetter`; `World::file()` serves it | Contract: image renders; **stale-bytes pin** (swap bytes, measurement changes); unknown name still errors cleanly |
 | ✅ **T11** | **`images.rs`** in `md2pdf-convert` | path resolution, `ImageProbe` trait, virtual naming, remote/missing policy | Stub-probe: resolved / missing / remote; collision of same-basename files; traversal **allowed** (see T11(a)); same basename in two dirs; name stability across runs |
 | ✅ **T12** | **Wire it through** | `SourceContext` (I1), `ImageManifest` (I3), `emit` uses real `#image` when resolved | End-to-end: a real PNG appears in the PDF; a missing one gives a placeholder + `ImageMissing`; a remote one gives `ImageSkipped` |
-| **T13** | **Ladder on real images** | `Rung::Scale`, image floor, `reflow: true`, arithmetic shrink in the probe — **not tests-only** | Slightly-oversized image **scales** (not rotates); hugely oversized rotates; scaled render occupies less width; tables unaffected |
+| ✅ **T13** | **Ladder on real images** | `Rung::Scale`, image floor, `reflow: true`, arithmetic shrink in the probe — **not tests-only** | Slightly-oversized image **scales** (not rotates); hugely oversized rotates; scaled render occupies less width; tables unaffected |
 | **T14** | **Finish the ladder** *(new — all atomic classes, not just images)* | probe decides rotate-and-scale together; `clip` finally emitted | Element still over after rotation clips and shows a marker |
 
 Each closes with `verify.sh` green. **Add test modules under `tests/compiler/`** — a new top-level

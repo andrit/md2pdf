@@ -11,6 +11,13 @@ pub struct Floors {
     pub prose_pt: f64,
     pub table_pt: f64,
     pub code_pt: f64,
+    /// Smallest scale an image may be reduced to before rotating instead (0..1).
+    ///
+    /// Not a point size — images shrink by scale factor. Without a floor here shrink
+    /// would always succeed and rotation would never fire, however unreadable the
+    /// result. A quarter size is the starting point; rotation buys roughly 1.5x the
+    /// width, which is the better trade below that. Tunable by eye like the others.
+    pub image_scale: f64,
 }
 
 impl Default for Floors {
@@ -19,11 +26,15 @@ impl Default for Floors {
             prose_pt: 9.0,
             table_pt: 7.0,
             code_pt: 7.0,
+            image_scale: 0.25,
         }
     }
 }
 
 impl Floors {
+    /// The point-size floor for a text-bearing class.
+    ///
+    /// Meaningless for `Image`, which shrinks by scale — use [`Floors::image_scale`].
     pub fn for_class(&self, class: ElementClass) -> f64 {
         match class {
             ElementClass::Table => self.table_pt,

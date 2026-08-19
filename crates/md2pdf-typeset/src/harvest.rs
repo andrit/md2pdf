@@ -28,9 +28,11 @@ pub fn harvest(doc: &PagedDocument, elements: &[Element]) -> Result<DecisionMap,
             .ok_or_else(|| TypesetError::Harvest(format!("no element for order {order}")))?;
 
         let size_pt = v["size"].as_f64().unwrap_or(0.0);
+        let factor = v["factor"].as_f64().unwrap_or(1.0);
         let rung = match v["rung"].as_str().ok_or_else(|| bad(v, "rung"))? {
             "none" => Rung::None,
             "shrink" => Rung::Shrink { size_pt },
+            "scale" => Rung::Scale { factor },
             "rotate" => Rung::Rotate,
             "clip" => Rung::Clip,
             other => return Err(TypesetError::Harvest(format!("unknown rung {other:?}"))),

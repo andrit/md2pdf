@@ -22,6 +22,11 @@ pub enum CompromiseKind {
     ShrunkToFloor {
         size_pt: f64,
     },
+    /// Resized rather than restyled — images. Reported as a percentage, because that
+    /// is the fact the reader needs; a point size would be meaningless here.
+    Scaled {
+        factor: f64,
+    },
     Rotated,
     Clipped,
     ImageSkipped,
@@ -56,6 +61,7 @@ impl Diagnostic {
             .filter_map(|d| {
                 let kind = match d.rung {
                     Rung::Shrink { size_pt } => CompromiseKind::ShrunkToFloor { size_pt },
+                    Rung::Scale { factor } => CompromiseKind::Scaled { factor },
                     Rung::Rotate => CompromiseKind::Rotated,
                     Rung::Clip => CompromiseKind::Clipped,
                     Rung::None => return None,

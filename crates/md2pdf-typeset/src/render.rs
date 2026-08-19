@@ -28,19 +28,22 @@ pub fn render_source(elements: &[Element], template: &Template, map: &DecisionMa
                 s.push_str(&format!("{}\n#v(0.65em)\n", el.body));
             }
             Rung::Shrink { size_pt } => {
-                if el.class.shrinks_by_scale() {
-                    let factor = (size_pt / template.base_size_pt).clamp(0.05, 1.0);
-                    s.push_str(&format!(
-                        "#scale({:.1}%)[{}]\n#v(0.65em)\n",
-                        factor * 100.0,
-                        el.body
-                    ));
-                } else {
-                    s.push_str(&format!(
-                        "#text(size: {size_pt}pt)[{}]\n#v(0.65em)\n",
-                        el.body
-                    ));
-                }
+                s.push_str(&format!(
+                    "#text(size: {size_pt}pt)[{}]\n#v(0.65em)\n",
+                    el.body
+                ));
+            }
+            Rung::Scale { factor } => {
+                // `reflow: true` is load-bearing. Typst's scale is a visual transform
+                // by default — "scales content without affecting layout" — so without
+                // it the element would draw smaller while still reserving its full
+                // original width, leaving the overflow exactly where it was.
+                let factor = factor.clamp(0.05, 1.0);
+                s.push_str(&format!(
+                    "#scale({:.2}%, reflow: true)[{}]\n#v(0.65em)\n",
+                    factor * 100.0,
+                    el.body
+                ));
             }
             Rung::Rotate => {
                 // Legal at top level. Illegal inside `layout()`, which is one reason
