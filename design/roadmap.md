@@ -70,7 +70,8 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 2 | Structure — workspace, toolchain, verify gate | ✅ done 2026-08-17 | `verify.sh` |
 | **3a** | **Conversion, Stage 1 — text** | **✅ code-complete 2026-08-18 (T5–T8); `/phase-audit` not yet run** | `/phase-audit` + `verify.sh` |
 | **3b** | **Images, Stage 2** | **◐ current — planned in `plan-images.md` (T10–T13)** | `/phase-audit` |
-| 3c | Engine, Paths, Output | planned | `/phase-audit` |
+| 3c1 | Engine — **walking skeleton**: one file, disk to disk | planned | `/phase-audit` |
+| 3c2 | Paths + Output — widen to batch, collisions | planned | `/phase-audit` |
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
 | 3e | Template catalogue + shipped template | planned | `/phase-audit` |
 | 3f | Review — attention gate, overrides | planned | `/phase-audit` |
@@ -119,23 +120,62 @@ three-crate seam; and real images go through the escalation ladder for the first
 **Exit:** a document with local, missing, and remote images converts — real image embedded and
 **confirmed by eye**, placeholders elsewhere, one `Compromise` each.
 
-## 3c · Engine, Paths, Output
+## 3c · Engine, Paths, Output — **vertical slice first** *(revised 2026-08-19)*
 
 The imperative shell. Four domain stubs still hold one line each — `job.rs`, `collision.rs`,
 `escalation.rs`, `event.rs` — and they get filled here, from the glossary.
 
-- **`contract.rs`** — `Command`/`Event`, plain serializable data. No lifetimes, closures, or trait
-  objects: in-process a channel, across a boundary line-delimited JSON, same shape either way.
-- **`job.rs`** — orchestration: convert → probe → harvest → render → write.
-- **`md2pdf-paths`** — `PathBroker` (the only crate touching the filesystem), `walk`, `mirror`,
-  and `settings`. Batch output **mirrors the source tree, never flattens**.
+### Why this phase is shaped differently
+
+Everything so far has been built **horizontally** — complete layers, nothing above them. That was
+deliberate: the project's risk sat almost entirely in one layer (does Typst's `measure()`/`layout()`
+actually support the thesis?), and slicing vertically through an unproven engine would have meant
+rebuilding the slice once the engine turned out different. The bet paid: the ladder, escaping, and
+images are all proven.
+
+But horizontal layers pass their own tests and can still fail to meet each other. **Every
+integration defect this project has hit was exactly that** — the body invariant across
+convert→typeset, a missing image failing the whole compilation rather than one element, compromises
+with no Element to attach to. Horizontal building finds those late, and 3c is the phase where the
+cost of finding them late is highest, because three bounded contexts land at once.
+
+So 3c is **explicitly split**, narrow end first. This is the plan, not a prediction that it might
+split.
+
+### 3c1 — the walking skeleton
+
+**One file, in and out, through every layer.** No batch, no collisions, no template discovery, no
+overrides.
+
+`PathBroker::read` → `convert()` → `probe` → `render` → `PathBroker::write`, driven by a minimal
+`Command`/`Event` pair.
+
+Deliberately excluded: directory walking, mirroring, collision policy, blanket resolutions,
+attention list. Each is a real requirement and each is a *widening* of a path that already works.
+
+**Exit:** `notes.md` on disk becomes `notes.pdf` on disk, with a real image in it, exercised by an
+engine-level test. The first time the whole stack runs end to end.
+
+### 3c2 — widen to batch
+
+- **`md2pdf-paths`** — `walk` (SourceSet discovery, records the SourceRoot), `mirror`
+  (OutputPath = Destination + Source relative to SourceRoot). Batch output **mirrors the source
+  tree, never flattens**.
 - **`output.rs`** — collision detection, `Resolution`, `BlanketResolution` (the apply-to-all
   affordance, without which batch is unusable at 50 files).
 - **The §4 seam** — merging convert-time compromises with the probe's `DecisionMap` into one sealed
   `Diagnostic`. `Diagnostic::from_decisions` only maps Rungs today.
+- **`contract.rs`** grows to the full `Command`/`Event` surface — plain serializable data, no
+  lifetimes, closures, or trait objects: in-process a channel, across a boundary line-delimited
+  JSON, same shape either way.
 
-**Exit:** a batch of sources converts and writes to disk with mirrored structure, collisions
-resolved, no UI.
+**Exit:** a directory of sources converts and writes with mirrored structure, collisions resolved,
+no UI.
+
+> **Carried risk:** the Command/Event contract is designed in 3c1 when only one command exists, and
+> a contract designed against a single case tends to fit that case only. Expect 3c2 to reshape it —
+> and prefer reshaping it there, while the only consumer is a test, over discovering the problem in
+> phase 4 when an adapter depends on it.
 
 ## 3d · CLI adapter, end to end
 
@@ -250,7 +290,7 @@ looked at.
 
 | Risk | Why it stays open |
 |---|---|
-| **3c is lumpy** — Engine + Paths + Output is three bounded contexts in one phase, plausibly as large as 3a–3f combined. Expect it to split once entered. | Sizing needs the contract designed first |
+| ~~3c is lumpy~~ — **resolved 2026-08-19**: split into 3c1 (vertical walking skeleton) and 3c2 (widen to batch), so the layers are proven to meet before three contexts land at once | done |
 | **Preview across a process boundary.** The contract is "line-delimited JSON either way", but an A4 page at 2× is ~5.6 MB of RGBA — roughly 7.5 MB base64 **per page**. In-process it is a pointer; across a boundary it is not obviously viable. May force a shared-memory or file-handle path for rasters. | Only bites if an out-of-process adapter is built; in-process egui is unaffected |
 | **Incremental recompile performance** never measured, though `comemo` memoisation is why `Typesetter` holds a long-lived `World`. | Named in the spike's own "Still open"; belongs to 3f |
 | **egui adapter** cannot be built or seen here. | Environmental, not resolvable by planning |
