@@ -184,6 +184,48 @@ Two assumptions were tested with a throwaway harness rather than trusted:
 - **Links, task-list checkbox glyphs (`☐`/`☑`), and escaped brackets inside table cells** all
   compile and render correctly in both passes.
 
+### 2.5a `lib.rs` — the public surface (T8) *(added 2026-08-18)*
+
+**T8 is small, and saying so is part of the plan.** `parse` and `emit` already do the work; T8 is
+the one function the rest of the app calls, plus the fixtures that prove it end to end.
+
+```rust
+pub fn convert(markdown: &str) -> Conversion
+```
+
+Four properties, each pinned by a test:
+
+1. **Infallible by design — no `Result`.** `parse` cannot fail (pulldown-cmark is total over any
+   `&str`) and `emit` cannot fail (every unhandled construct becomes a `Compromise`, not an error).
+   A `ConversionError` would be a type with no inhabitants. Pinned by feeding arbitrary bytes —
+   binary, lone surrogates' UTF-8 neighbours, deeply nested lists, unterminated fences — and
+   asserting a `Conversion` comes back.
+2. **No `ImageProbe` parameter yet.** Stage 1 placeholders are unconditional, so the resolver
+   arrives in T9 with the rest of image handling. Adding a parameter now would be speculative; the
+   crate is internal, so widening the signature later costs nothing.
+3. **Order is preserved and unique** across the whole document, not just per block (§1.2).
+4. **Compromises are addressable** — every one points at an `Element` that exists.
+
+**Fixtures go in `tests/compiler/` as a new module**, never a new top-level file: each file under
+`tests/` becomes its own executable statically linking ~250 typst crates, and linking two at once
+got `ld` OOM-killed. That constraint is now load-bearing.
+
+#### Naming — the return type is a real decision
+
+The glossary says types match its terms **exactly**, and it has **no `Conversion` type**:
+`Conversion` is the name of the *bounded context*, and `convert` is listed under synonym drift as
+"the whole user-facing action". `Emitted` (what `emit` returns today) is not a glossary word either.
+
+*Recommended:* keep `Conversion` as the type name **and add it to the glossary**, mirroring the
+existing `Compilation` entry:
+
+> **Conversion** — the result of converting one Source: its Elements plus the Compromises made
+> before any Typst compilation. *Type:* `Conversion`.
+
+The glossary rule cuts both ways — when code and glossary disagree the fix can be to name the term.
+`Compilation : Typesetting` and `Conversion : Conversion-context` are the same shape, and Rust
+namespaces the module from the type. `Emitted` then becomes an internal detail of `emit`.
+
 ### 2.5 `images.rs` — resolution only, never reading
 
 Path resolution is pure math. **Existence is not** — and a pure crate cannot stat a file. So the
