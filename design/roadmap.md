@@ -54,7 +54,8 @@ Detail lives in the phase plans; this is the index.
 | T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ staged |
 | T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ staged |
 | T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ staged |
-| T13 | Escalation ladder on real images | 3b | ☐ next |
+| T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ☐ next |
+| T14 | Finish the ladder — rotate+scale, `clip` finally emitted (all atomic classes) | 3b | ☐ |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.
@@ -305,7 +306,7 @@ looked at.
 | **Styling assertions are new and thin** — one test covers italic; nothing pins colour, size, or spacing | extend as 3e templates land |
 | Glyph coverage beyond Latin | before 6 |
 | Bare-URL autolinks unsupported by pulldown-cmark | accepted ceiling |
-| Clipping rung never probed | 3f |
+| ~~Clipping rung never probed~~ — **confirmed dead code 2026-08-19**: `probe.rs` can only emit none/shrink/rotate, so `Rung::Clip` is unreachable. Scheduled as T14 | T14 |
 | One integration-test binary per crate — new `tests/*.rs` files that link typst will OOM the linker | permanent build constraint |
 
 ## Decisions open for the operator

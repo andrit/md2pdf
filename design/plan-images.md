@@ -100,9 +100,13 @@ typeset  →  Typesetter::add_file(virtual_name, bytes) before probe/render
 probe** — every image test so far used a placeholder box.
 
 **Decision:** emit `#image("<virtual>")` with no explicit width, letting intrinsic size drive
-layout, and let the existing ladder do its job. Verified, not assumed: a deliberately oversized
-image must escalate — shrink by scale, then rotate — exactly as `oversized_figure_escalates_to_rotate`
-already pins for a rectangle.
+layout, and let the existing ladder do its job. Verified, not assumed.
+
+> **Corrected by T13, 2026-08-19:** verification found the ladder does **not** do its job for
+> images — the shrink rung steps font size, which cannot move an image, so every oversized image
+> skips straight to Rotate; and `#scale` without `reflow: true` does not change the space the
+> content occupies. T13 is therefore a fix task, not a test task. The emission decision itself
+> stands, except that images are wrapped in a `box` so they are inline-level (T12).
 
 ---
 
@@ -304,6 +308,98 @@ for free in every future test that converts anything.
 
 ---
 
+## T13 in detail — the ladder on real images *(planned 2026-08-19)*
+
+**T13 was scoped as "tests only". That was wrong.** I4 said "let the existing ladder do its job,
+verified not assumed" — verification says it does not. Three defects, found by putting a real
+2000×300 image through the probe:
+
+```
+NATURAL 2000   AVAILABLE 196   RUNG Rotate     ← shrink skipped entirely
+SCALE natural=2000 | SCALE+REFLOW natural=400
+```
+
+**1. Images can never shrink.** The probe's ladder steps *font size* down and re-measures:
+
+```typst
+while s >= floor and chosen == none {
+  if measure(text(size: s, body)).width <= avail { chosen = s }
+  s = s - 0.5pt
+}
+```
+
+An image's width does not depend on font size, so every measurement returns the same number, no `s`
+ever fits, and the element falls straight through to **Rotate**. The one class that can shrink
+*losslessly* is the one class that never does — a slightly-too-wide diagram gets a landscape page of
+its own instead of being scaled 10%.
+
+**2. `#scale` does not affect layout.** Typst's docs: *"Scales content without affecting layout"*,
+`reflow` defaults to `false`. `render.rs` emits `#scale({factor}%)[{body}]`, so a shrunk image is
+drawn smaller while the layout still reserves its **full original width** — measured above: 2000pt
+scaled to 20% still occupies 2000pt, and only `reflow: true` gives the expected 400pt. The shrink
+rung would not have fixed the overflow even if it were reachable.
+
+**3. The probe never emits `clip`.** `Rung::Clip` exists, `harvest` parses it, `render` implements
+it — and `probe.rs` can only produce `none`, `shrink`, or `rotate`. The last rung is unreachable
+code. This matches the spike's own open item ("clipping, the last rung, still unprobed") and it
+affects **tables as much as images**.
+
+Also inaccurate: `Rung::Rotate`'s doc comment says *"The RenderPass re-measures there"*. It does
+not — the RenderPass never measures, by design. It renders at natural size on a landscape page and
+hopes. Fixing the comment is part of this task; fixing the behaviour is not.
+
+### Decisions
+
+**(a) Image shrink is arithmetic, not a search.** For an atomic image the probe needs no loop:
+
+```
+required = available / natural
+required >= 1            -> None
+required >= floor_scale  -> Shrink by `required`
+otherwise                -> Rotate
+```
+
+One measurement instead of ~20, and it is exact rather than quantised to 0.5pt steps.
+
+**(b) A scale is not a font size — add `Rung::Scale { factor }`.**
+The tempting zero-churn option is to reuse `Shrink { size_pt }` and emit `base_size_pt × required`,
+because `render.rs` already divides by `base_size_pt` to recover a factor. Rejected on the
+full-picture check: in the finished app the attention gate must say *"shrunk to 8pt"* for text and
+*"scaled to 40%"* for an image, and an Element-scope Override must let the user **set** one or the
+other. Laundering a ratio through a points field means every consumer reverses the arithmetic to
+find out which fact it is holding.
+
+Blast radius is real but contained: `Rung`, `render.rs`, `diagnostic.rs`
+(`CompromiseKind::ShrunkToFloor` needs a scale sibling), and the tests that name rungs.
+
+**(c) `Floors` gains an image scale floor.** Floors are per class and live with the design tokens.
+Without one, shrink always succeeds and rotate never fires for images. Starting point **0.25** — a
+diagram below a quarter size is unreadable, and rotation buys roughly 1.5× width, which is the
+better trade. Tunable by eye in 3d, like the other floors.
+
+**(d) `reflow: true` on the scale in `render.rs`.** Without it, (a) and (c) are decorative.
+
+### Out of scope — new task T14, "finish the ladder"
+
+Defect 3 is **not** image-specific, so fixing it inside an images task would bury it. After
+rotation an element may still overflow, and nothing clips or marks it. Closing that means the probe
+deciding rotate-and-scale together (the RenderPass cannot re-measure), plus emitting `clip` when
+even landscape is not enough.
+
+That is the escalation ladder finally being complete for **every** atomic class, and it deserves its
+own task rather than riding along here. Recorded in the roadmap; the spike flagged it first.
+
+### Tests
+
+- A small image: `Rung::None`, unchanged.
+- A slightly oversized image: **`Scale`**, not `Rotate` — the regression this task exists to prevent.
+- A hugely oversized image (below the floor): `Rotate`.
+- The scaled render actually **occupies less width** — the `reflow` pin, measured rather than eyeballed.
+- A wide *table* still behaves exactly as before: this task must not disturb the text path.
+- Visual: the scaled image looks right on the page and does not overlap the text beneath it.
+
+---
+
 ## Work breakdown
 
 | | Task | Deliverable | Tests |
@@ -311,7 +407,8 @@ for free in every future test that converts anything.
 | ✅ **T10** | **`World` file map** in `md2pdf-typeset` | `add_file`/`clear_files` on `TypstWorld` + `Typesetter`; `World::file()` serves it | Contract: image renders; **stale-bytes pin** (swap bytes, measurement changes); unknown name still errors cleanly |
 | ✅ **T11** | **`images.rs`** in `md2pdf-convert` | path resolution, `ImageProbe` trait, virtual naming, remote/missing policy | Stub-probe: resolved / missing / remote; collision of same-basename files; traversal **allowed** (see T11(a)); same basename in two dirs; name stability across runs |
 | ✅ **T12** | **Wire it through** | `SourceContext` (I1), `ImageManifest` (I3), `emit` uses real `#image` when resolved | End-to-end: a real PNG appears in the PDF; a missing one gives a placeholder + `ImageMissing`; a remote one gives `ImageSkipped` |
-| **T13** | **Ladder on real images** | — | Oversized image escalates (shrink → rotate); a small image is left alone |
+| **T13** | **Ladder on real images** | `Rung::Scale`, image floor, `reflow: true`, arithmetic shrink in the probe — **not tests-only** | Slightly-oversized image **scales** (not rotates); hugely oversized rotates; scaled render occupies less width; tables unaffected |
+| **T14** | **Finish the ladder** *(new — all atomic classes, not just images)* | probe decides rotate-and-scale together; `clip` finally emitted | Element still over after rotation clips and shows a marker |
 
 Each closes with `verify.sh` green. **Add test modules under `tests/compiler/`** — a new top-level
 file in `crates/*/tests/` that links typst will OOM the linker.
