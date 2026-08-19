@@ -265,3 +265,37 @@ fn a_stale_override_is_rejected_not_misapplied() {
     assert!(map.apply_override(&els[0].id, Rung::None));
     assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
 }
+
+/// Emphasis must actually render in an italic face.
+///
+/// This is a **styling** pin, not a text pin. Italic silently did not render — the
+/// vendored variable `SourceSans3.ttf` has a `wght` axis and no `ital`/`slnt`, so
+/// `#emph` fell back to upright. Every text-based test passed throughout, because
+/// `text()` sees characters and not style. Found by looking at a rendered page.
+#[test]
+fn emphasis_renders_in_an_italic_face() {
+    let el = Element::new(
+        0,
+        ElementClass::Prose,
+        Markup::raw("plain #emph[slanted] plain"),
+    );
+    let runs = Typesetter::new()
+        .render(&[el], &template(), &DecisionMap { decisions: vec![] })
+        .expect("compiles")
+        .text_runs();
+
+    let italic: Vec<_> = runs.iter().filter(|(_, _, s)| *s == "italic").collect();
+    assert!(
+        !italic.is_empty(),
+        "nothing rendered in an italic face; runs were {runs:?}"
+    );
+    assert!(
+        italic.iter().any(|(t, _, _)| t.contains("slanted")),
+        "the emphasised word is not the italic one: {italic:?}"
+    );
+    // And it must be OUR family, not a fallback serif.
+    assert!(
+        italic.iter().any(|(_, f, _)| f == "Source Sans 3"),
+        "italic came from a fallback family: {italic:?}"
+    );
+}

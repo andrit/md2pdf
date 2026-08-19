@@ -38,6 +38,40 @@ pub fn text(doc: &PagedDocument) -> String {
     out
 }
 
+/// Each rendered glyph run as `(text, family, style)` — the oracle for **styling**.
+///
+/// `text()` reports characters and so cannot see a styling failure. Italic silently
+/// not rendering (no italic face in the FontBook, `#emph` falling back to upright) was
+/// invisible to every text-based test and had to be found by eye. This makes that
+/// class of defect assertable: the run carrying "italic" must report style `Italic`.
+///
+/// Style crosses as a plain `&'static str`, not a typst enum.
+pub fn text_runs(doc: &PagedDocument) -> Vec<(String, String, &'static str)> {
+    let mut out = Vec::new();
+    for page in doc.pages() {
+        collect_runs(&page.frame, &mut out);
+    }
+    out
+}
+
+fn collect_runs(frame: &typst::layout::Frame, out: &mut Vec<(String, String, &'static str)>) {
+    for (_, item) in frame.items() {
+        match item {
+            typst::layout::FrameItem::Text(t) => {
+                let info = t.font.font().info();
+                let style = match info.variant.style {
+                    typst::text::FontStyle::Normal => "normal",
+                    typst::text::FontStyle::Italic => "italic",
+                    typst::text::FontStyle::Oblique => "oblique",
+                };
+                out.push((t.text.to_string(), info.family.clone(), style));
+            }
+            typst::layout::FrameItem::Group(g) => collect_runs(&g.frame, out),
+            _ => {}
+        }
+    }
+}
+
 fn collect_text(frame: &typst::layout::Frame, out: &mut String) {
     for (_, item) in frame.items() {
         match item {

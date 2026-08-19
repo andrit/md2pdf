@@ -83,6 +83,11 @@ impl Compilation {
     pub fn text(&self) -> String {
         export::text(&self.doc)
     }
+    /// Each glyph run as `(text, font family, style)` — the oracle for **styling**,
+    /// which `text()` cannot see. Style is `"normal"` / `"italic"` / `"oblique"`.
+    pub fn text_runs(&self) -> Vec<(String, String, &'static str)> {
+        export::text_runs(&self.doc)
+    }
     pub fn page_count(&self) -> usize {
         self.doc.pages().len()
     }
