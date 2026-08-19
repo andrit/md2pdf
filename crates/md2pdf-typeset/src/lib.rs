@@ -113,6 +113,22 @@ impl Typesetter {
         }
     }
 
+    /// Register bytes the next compilation may reference — images, in practice.
+    ///
+    /// Typst treats an unresolvable file as a compilation error for the **whole
+    /// document**, so every image a document references must be registered before
+    /// `probe` or `render`. Returns `false` if the name is not a usable virtual path.
+    ///
+    /// Bytes may be replaced under an existing name; `comemo` invalidates correctly.
+    pub fn add_file(&self, name: &str, bytes: Vec<u8>) -> bool {
+        self.world.add_file(name, bytes)
+    }
+
+    /// Drop every registered file — call between Jobs.
+    pub fn clear_files(&self) {
+        self.world.clear_files();
+    }
+
     /// Families available to Templates. Typst ships no sans-serif; ours are added.
     pub fn font_families(&self) -> Vec<String> {
         fonts::FontLibrary::shipped().families()

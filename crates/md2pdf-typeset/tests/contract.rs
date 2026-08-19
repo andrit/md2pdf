@@ -299,3 +299,146 @@ fn emphasis_renders_in_an_italic_face() {
         "italic came from a fallback family: {italic:?}"
     );
 }
+
+// ---- The World file map (T10) ----------------------------------------------
+//
+// Typst cannot load a file the World will not serve, and a missing file is a
+// compilation error for the WHOLE document rather than a skipped element. These pin
+// the behaviour the image pipeline is built on.
+
+const SQUARE_10X10: &[u8] = include_bytes!("fixtures/square-10x10.png");
+const WIDE_200X20: &[u8] = include_bytes!("fixtures/wide-200x20.png");
+
+fn image_element(name: &str) -> Element {
+    Element::new(
+        0,
+        ElementClass::Image,
+        Markup::raw(format!(r#"#image("{name}")"#)),
+    )
+}
+
+fn natural_width_of(ts: &Typesetter, el: &Element) -> f64 {
+    ts.probe(std::slice::from_ref(el), &template())
+        .expect("probe compiles")
+        .0
+        .get(&el.id)
+        .expect("decision")
+        .natural_pt
+}
+
+#[test]
+fn a_registered_image_renders() {
+    let ts = Typesetter::new();
+    assert!(ts.add_file("img.png", SQUARE_10X10.to_vec()));
+
+    let el = image_element("img.png");
+    let compilation = ts
+        .render(
+            std::slice::from_ref(&el),
+            &template(),
+            &DecisionMap { decisions: vec![] },
+        )
+        .expect("a registered image must compile");
+
+    assert_eq!(compilation.page_count(), 1);
+    let pdf = compilation.pdf().expect("pdf");
+    assert!(pdf.starts_with(b"%PDF"));
+}
+
+#[test]
+fn an_unregistered_image_fails_the_whole_compilation() {
+    // Not a defect — the reason Stage 1 emits placeholders instead of `#image`.
+    // Pinned so that if Typst ever softens this, we find out and can revisit.
+    let ts = Typesetter::new();
+    let el = image_element("never-registered.png");
+    let err = match ts.render(
+        std::slice::from_ref(&el),
+        &template(),
+        &DecisionMap { decisions: vec![] },
+    ) {
+        Ok(_) => panic!("an unresolvable file must fail the compilation"),
+        Err(e) => e,
+    };
+    assert!(
+        err.to_string().contains("file not found"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn replacing_bytes_is_not_served_stale() {
+    // The risk worth pinning: `Typesetter` holds a long-lived `World` so `comemo`
+    // memoisation survives between compilations. If a replaced image were served from
+    // that cache the document would silently show the OLD picture — no error, no
+    // diagnostic. It is not, and this keeps it that way.
+    let ts = Typesetter::new();
+    let el = image_element("img.png");
+
+    ts.add_file("img.png", SQUARE_10X10.to_vec());
+    let square = natural_width_of(&ts, &el);
+
+    ts.add_file("img.png", WIDE_200X20.to_vec());
+    let wide = natural_width_of(&ts, &el);
+
+    assert!(
+        wide > square * 5.0,
+        "replaced image was served stale: {square}pt then {wide}pt"
+    );
+}
+
+#[test]
+fn clearing_files_unregisters_them() {
+    // Between Jobs, so one document's images can never leak into another's.
+    let ts = Typesetter::new();
+    ts.add_file("img.png", SQUARE_10X10.to_vec());
+    let el = image_element("img.png");
+    assert!(ts
+        .render(
+            std::slice::from_ref(&el),
+            &template(),
+            &DecisionMap { decisions: vec![] }
+        )
+        .is_ok());
+
+    ts.clear_files();
+    assert!(
+        ts.render(
+            std::slice::from_ref(&el),
+            &template(),
+            &DecisionMap { decisions: vec![] }
+        )
+        .is_err(),
+        "cleared file was still served"
+    );
+}
+
+#[test]
+fn an_unusable_virtual_name_is_rejected_rather_than_panicking() {
+    // Names ultimately derive from filesystem paths this crate never sees, so a
+    // library must not panic on one. Typst rejects exactly two shapes
+    // (`typst-syntax/src/path.rs`, `PathError`):
+    //
+    //   Escapes   — the path would climb above the root (`..`)
+    //   Backslash — cross-platform hazard, since Windows uses it as a separator
+    //
+    // The first is free defence-in-depth for image path traversal: even if a
+    // malformed name reached here, `../../etc/passwd` cannot be registered.
+    let ts = Typesetter::new();
+
+    assert!(
+        !ts.add_file("../escape.png", vec![1, 2, 3]),
+        "a path escaping the root was accepted"
+    );
+    assert!(
+        !ts.add_file("back\\slash.png", vec![1, 2, 3]),
+        "a backslash name was accepted"
+    );
+    assert!(
+        ts.add_file("img-9f3a1c77b2e40d51.png", vec![1, 2, 3]),
+        "the virtual naming scheme from plan-images.md was rejected"
+    );
+    assert!(
+        ts.add_file("nested/dir/img.png", vec![1, 2, 3]),
+        "a nested virtual path was rejected"
+    );
+}

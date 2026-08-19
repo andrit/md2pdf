@@ -51,8 +51,8 @@ Detail lives in the phase plans; this is the index.
 | T8 | `convert()` public API + `Conversion` type | 3a | ✅ `2316aab` |
 | — | Italic faces + `text_runs()` styling oracle | 3a | ✅ `105ca2e` |
 | T9 | *(superseded — split into T10–T13)* | 3b | — |
-| T10 | `World` file map in `md2pdf-typeset` | 3b | ☐ next |
-| T11 | `images.rs` — resolution, probe, virtual naming | 3b | ☐ |
+| T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ staged |
+| T11 | `images.rs` — resolution, probe, virtual naming | 3b | ☐ next |
 | T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ☐ |
 | T13 | Escalation ladder on real images | 3b | ☐ |
 

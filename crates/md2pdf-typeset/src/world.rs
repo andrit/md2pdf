@@ -1,6 +1,7 @@
 //! The `World` implementation. Confined here with everything else typst-shaped.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Duration};
@@ -11,12 +12,15 @@ use typst::{Library, LibraryExt, World};
 
 use crate::fonts::FontLibrary;
 
+/// `None` when the name is not a usable virtual path.
+pub(crate) fn try_file_id(name: &str) -> Option<FileId> {
+    VirtualPath::new(name)
+        .ok()
+        .map(|vpath| RootedPath::new(VirtualRoot::Project, vpath).intern())
+}
+
 pub(crate) fn file_id(name: &str) -> FileId {
-    RootedPath::new(
-        VirtualRoot::Project,
-        VirtualPath::new(name).expect("valid vpath"),
-    )
-    .intern()
+    try_file_id(name).expect("valid vpath")
 }
 
 /// Long-lived so that `comemo` memoisation survives between compilations — that is
@@ -27,6 +31,17 @@ pub struct TypstWorld {
     fonts: Vec<Font>,
     main_id: FileId,
     main: RefCell<Source>,
+    /// Virtual files the document may reference — images, in practice.
+    ///
+    /// Typst cannot load a file the `World` will not serve, and an unresolvable file
+    /// is a compilation error for the **whole document**, not a skipped element. So
+    /// everything a document references must be in here before compiling.
+    ///
+    /// Safe to mutate between compilations despite the long-lived `World`: `comemo`
+    /// tracks `World::file` accesses and invalidates correctly. Verified — replacing
+    /// bytes under the same name changes the next measurement (see
+    /// `replacing_bytes_is_not_served_stale` in `tests/contract.rs`).
+    files: RefCell<HashMap<FileId, Bytes>>,
 }
 
 // Compilation is driven from one thread at a time; the RefCell never escapes.
@@ -43,7 +58,29 @@ impl TypstWorld {
             fonts: lib.fonts,
             main_id,
             main: RefCell::new(Source::new(main_id, String::new())),
+            files: RefCell::new(HashMap::new()),
         }
+    }
+
+    /// Register bytes under a virtual name, replacing any previous entry.
+    ///
+    /// Returns `false` when the name is not a usable virtual path — a library must not
+    /// panic on a caller's string, and the name ultimately derives from a filesystem
+    /// path this crate never sees.
+    pub fn add_file(&self, name: &str, bytes: Vec<u8>) -> bool {
+        match try_file_id(name) {
+            Some(id) => {
+                self.files.borrow_mut().insert(id, Bytes::new(bytes));
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Drop every registered file. Called between Jobs so one document's images can
+    /// never be served to another, and so a long batch does not accumulate them.
+    pub fn clear_files(&self) {
+        self.files.borrow_mut().clear();
     }
 
     pub fn set_source(&self, text: String) {
@@ -75,7 +112,11 @@ impl World for TypstWorld {
         }
     }
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        Err(FileError::NotFound(id.vpath().get_without_slash().into()))
+        self.files
+            .borrow()
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| FileError::NotFound(id.vpath().get_without_slash().into()))
     }
     fn font(&self, index: usize) -> Option<Font> {
         self.fonts.get(index).cloned()
