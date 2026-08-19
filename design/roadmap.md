@@ -42,7 +42,7 @@ iteratively"**, which is where the project sits; steps 0–2 are complete.
 | 1 | Define — stack & scope decisions | ✅ done 2026-08-16 | exempt (documents) |
 | 2 | Structure — workspace, toolchain, verify gate | ✅ done 2026-08-17 | `verify.sh` |
 | **3a** | **Conversion, Stage 1 — text** | **✅ code-complete 2026-08-18 (T5–T8); `/phase-audit` not yet run** | `/phase-audit` + `verify.sh` |
-| 3b | Images, Stage 2 | planned | `/phase-audit` |
+| **3b** | **Images, Stage 2** | **◐ current — planned in `plan-images.md` (T10–T13)** | `/phase-audit` |
 | 3c | Engine, Paths, Output | planned | `/phase-audit` |
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
 | 3e | Template catalogue + shipped template | planned | `/phase-audit` |
@@ -79,12 +79,18 @@ whole document** — which is why Stage 1 emits placeholders instead.
 > PNG bytes: **ProbePass OK, RenderPass OK, 3121-byte PDF**. The approach is proven; the prototype
 > was reverted so the real thing lands with tests. Entry risk here is now low.
 
-Work: the `World` file map in typeset (with contract tests); T9 (`images.rs` — resolution,
-`ImageProbe` injected, remote/missing policy per D4); the virtual-name → path manifest; engine reads
-bytes via `md2pdf-paths`.
+**Planned in detail: `design/plan-images.md`** (T10–T13). Second probe, 2026-08-19: `comemo` does
+**not** serve stale bytes when a file is replaced under the same virtual name — measurement changed
+10pt → 200pt on recompile. So a plain mutable file map is safe and no cache-busting is needed; the
+phase's largest unknown is gone.
 
-**Exit:** a document with local, missing, and remote images converts — real image embedded,
-placeholders elsewhere, one `Compromise` each.
+Four decisions the sketch had not made, now settled there: `convert()` gains a `SourceContext`
+(it cannot resolve a relative path without knowing where the Source lives); virtual names are
+`img-<fnv1a(abs path)>.<ext>` for uniqueness, stability and dedup; the `ImageManifest` is the
+three-crate seam; and real images go through the escalation ladder for the first time.
+
+**Exit:** a document with local, missing, and remote images converts — real image embedded and
+**confirmed by eye**, placeholders elsewhere, one `Compromise` each.
 
 ## 3c · Engine, Paths, Output
 

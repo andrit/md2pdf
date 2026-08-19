@@ -1,6 +1,6 @@
 # Plan — the Conversion crate (`md2pdf-convert`)
 
-**Status:** approved and in progress — T5, T6 complete · **Written:** 2026-08-18 · **Amended:** 2026-08-18
+**Status:** T5–T8 COMPLETE (phase 3a code-complete). T9 moves to `plan-images.md` · **Written:** 2026-08-18 · **Amended:** 2026-08-19
 **Continues:** T1–T4 (the Typst anti-corruption layer), complete and verified.
 
 The Conversion bounded context: **markdown in, Typst markup out. Pure and total, no I/O.**
@@ -210,21 +210,16 @@ Four properties, each pinned by a test:
 `tests/` becomes its own executable statically linking ~250 typst crates, and linking two at once
 got `ld` OOM-killed. That constraint is now load-bearing.
 
-#### Naming — the return type is a real decision
+#### Naming — ✅ RESOLVED and shipped
 
-The glossary says types match its terms **exactly**, and it has **no `Conversion` type**:
-`Conversion` is the name of the *bounded context*, and `convert` is listed under synonym drift as
-"the whole user-facing action". `Emitted` (what `emit` returns today) is not a glossary word either.
+The glossary requires types to match its terms **exactly**, and it had **no `Conversion` type**:
+`Conversion` was the name of the *bounded context*, and `convert` is listed under synonym drift as
+"the whole user-facing action".
 
-*Recommended:* keep `Conversion` as the type name **and add it to the glossary**, mirroring the
-existing `Compilation` entry:
-
-> **Conversion** — the result of converting one Source: its Elements plus the Compromises made
-> before any Typst compilation. *Type:* `Conversion`.
-
-The glossary rule cuts both ways — when code and glossary disagree the fix can be to name the term.
-`Compilation : Typesetting` and `Conversion : Conversion-context` are the same shape, and Rust
-namespaces the module from the type. `Emitted` then becomes an internal detail of `emit`.
+**Resolved by naming the term rather than bending the code** — the glossary rule cuts both ways.
+`design/GLOSSARY.md` now carries a `Conversion` entry mirroring `Compilation`, and
+`Conversion { elements, compromises }` is the shipped return type. `Emitted` is an internal detail
+of `emit`.
 
 ### 2.5 `images.rs` — resolution only, never reading
 
@@ -312,11 +307,11 @@ else is validated against. TDD throughout, per CLAUDE.md — tests alongside or 
 
 | | Task | Deliverable | Tests |
 |---|---|---|---|
-| **T5** | **`escape.rs` + round-trip harness** | Typst-safe text emission; the escape set derived empirically | Round-trip property over adversarial corpus; the `#let` injection case |
-| **T6** | **`parse.rs` + `classify.rs`** | events → top-level block stream; construct → class | Nesting fold (code-in-list, table-in-quote); exhaustive per-construct class table; `order` uniqueness |
-| **T7** | **`emit.rs`** + **D1** | block stream → `Vec<Element>` with valid bodies; image placeholders; footnote absorption; `CompromiseKind::UnsupportedConstruct` added to the domain | Golden markup per construct; **both-positions compile test** (§1.1); no-trailing-spacing; `order` uniqueness |
-| **T8** | **`lib.rs` public API** | `convert()` → `Conversion { elements, compromises }` | Full-document fixtures end-to-end through the real `Typesetter` |
-| **T9** | **`images.rs`** *(Stage 2, gated)* | resolution + policy + manifest, `ImageProbe` injected | Stub-probe cases: resolved / missing / remote; path-escape refusal |
+| ✅ **T5** | **`escape.rs` + round-trip harness** | Typst-safe text emission; the escape set derived empirically | Round-trip property over adversarial corpus; the `#let` injection case |
+| ✅ **T6** | **`parse.rs` + `classify.rs`** | events → top-level block stream; construct → class | Nesting fold (code-in-list, table-in-quote); exhaustive per-construct class table; `order` uniqueness |
+| ✅ **T7** | **`emit.rs`** + **D1** | block stream → `Vec<Element>` with valid bodies; image placeholders; footnote absorption; `CompromiseKind::UnsupportedConstruct` added to the domain | Golden markup per construct; **both-positions compile test** (§1.1); no-trailing-spacing; `order` uniqueness |
+| ✅ **T8** | **`lib.rs` public API** | `convert()` → `Conversion { elements, compromises }` | Full-document fixtures end-to-end through the real `Typesetter` |
+| **T9** | **`images.rs`** — *moved to `design/plan-images.md` (phase 3b)* | resolution + policy + manifest, `ImageProbe` injected | Stub-probe cases: resolved / missing / remote; path-escape refusal |
 
 `verify.sh` must stay green at every step — boundaries, fmt, clippy `-D warnings`, test, build.
 
