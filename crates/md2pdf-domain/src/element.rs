@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::hash::fnv1a;
 use crate::markup::Markup;
 
 /// Addresses one Element across the ProbePass, the RenderPass, and recompilations.
@@ -33,16 +34,6 @@ impl ElementId {
     pub fn matches(&self, other: &ElementId) -> bool {
         self.order == other.order && self.content_hash == other.content_hash
     }
-}
-
-/// Small, stable, dependency-free. Not cryptographic — this detects edits, not attacks.
-fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= *b as u64;
-        h = h.wrapping_mul(0x100_0000_01b3);
-    }
-    h
 }
 
 /// The category an Element belongs to. Carries three jobs: it selects the Floor, it
