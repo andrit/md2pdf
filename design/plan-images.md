@@ -387,7 +387,8 @@ deciding rotate-and-scale together (the RenderPass cannot re-measure), plus emit
 even landscape is not enough.
 
 That is the escalation ladder finally being complete for **every** atomic class, and it deserves its
-own task rather than riding along here. Recorded in the roadmap; the spike flagged it first.
+own task rather than riding along here. **Planned in `design/plan-ladder.md`** (phase 3b2); the
+spike flagged it first.
 
 ### Tests
 

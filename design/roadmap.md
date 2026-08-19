@@ -51,11 +51,11 @@ Detail lives in the phase plans; this is the index.
 | T8 | `convert()` public API + `Conversion` type | 3a | ✅ `2316aab` |
 | — | Italic faces + `text_runs()` styling oracle | 3a | ✅ `105ca2e` |
 | T9 | *(superseded — split into T10–T13)* | 3b | — |
-| T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ staged |
-| T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ staged |
-| T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ staged |
-| T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ staged |
-| T14 | Finish the ladder — rotate+scale, `clip` finally emitted | **not image-specific** | ☐ next |
+| T10 | `World` file map in `md2pdf-typeset` | 3b | ✅ `2f59b6b` |
+| T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ `f6da45d` |
+| T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ `ba34fec` |
+| T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ `447182a` |
+| T14 | Finish the ladder — rotate+scale, `clip` finally emitted | 3b2 | ☐ next |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.
@@ -70,7 +70,8 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 1 | Define — stack & scope decisions | ✅ done 2026-08-16 | exempt (documents) |
 | 2 | Structure — workspace, toolchain, verify gate | ✅ done 2026-08-17 | `verify.sh` |
 | **3a** | **Conversion, Stage 1 — text** | **✅ code-complete 2026-08-18 (T5–T8); `/phase-audit` not yet run** | `/phase-audit` + `verify.sh` |
-| **3b** | **Images, Stage 2** | **◐ current — planned in `plan-images.md` (T10–T13)** | `/phase-audit` |
+| 3b | Images, Stage 2 | ✅ code-complete 2026-08-19 (T10–T13); `/phase-audit` not run | `/phase-audit` |
+| **3b2** | **Finish the escalation ladder** — all atomic classes | **◐ current (T14)** | `/phase-audit` |
 | 3c1 | Engine — **walking skeleton**: one file, disk to disk | planned | `/phase-audit` |
 | 3c2 | Paths + Output — widen to batch, collisions | planned | `/phase-audit` |
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
@@ -118,8 +119,32 @@ Four decisions the sketch had not made, now settled there: `convert()` gains a `
 `img-<fnv1a(abs path)>.<ext>` for uniqueness, stability and dedup; the `ImageManifest` is the
 three-crate seam; and real images go through the escalation ladder for the first time.
 
-**Exit:** a document with local, missing, and remote images converts — real image embedded and
-**confirmed by eye**, placeholders elsewhere, one `Compromise` each.
+**Exit criteria — all met 2026-08-19:**
+
+- ✅ a local image reaches the PDF, **confirmed by eye**
+- ✅ missing and remote images degrade to visible placeholders, one `Compromise` each
+- ✅ an oversized image escalates through the ladder
+- ✅ `verify.sh` green
+- ⚠️ `/phase-audit` not run — unavailable in this environment, as in 3a
+
+**Found while building, and fixed here:** inline images were block-level and broke a sentence
+across three lines (now wrapped in a `box`); `clear_files()` carried the wrong rationale, which
+would have made a batch re-read every shared image.
+
+## 3b2 · Finish the escalation ladder *(current)*
+
+Not an images task, which is why it was lifted out of 3b. **Planned in `design/plan-ladder.md`.**
+
+`probe.rs` can only emit `none`, `shrink`, `rotate` — **`Rung::Clip` is unreachable code**, though
+`harvest` parses it and `render` implements it. So an element still too wide after rotation
+overflows silently, with no marker and no Compromise. That is true for **tables as much as images**,
+and it has been open since the spike first flagged it.
+
+Doing it now, before 3d tunes floors by eye and before 3f offers overrides, because both of those
+assume the ladder means what the design says it means.
+
+**Exit:** an element too wide even for landscape is clipped and visibly marked; the ladder's four
+rungs are all reachable.
 
 ## 3c · Engine, Paths, Output — **vertical slice first** *(revised 2026-08-19)*
 
