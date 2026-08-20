@@ -70,7 +70,7 @@ Detail lives in the phase plans; this is the index.
 | T20 | Collisions: detection, `Resolution`, `Diagnostic::seal` | 3c2 | ✅ staged |
 | T21 | Batch `Command`/`Event` + orchestration | 3c2 | ✅ staged |
 | T22 | Guard G3 — determinism + golden-hash tests | guards | ✅ staged |
-| T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ☐ next |
+| T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ✅ staged |
 | T24 | Guard G2 — no UI deps *(gated on adapter location)* | guards | ☐ |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already

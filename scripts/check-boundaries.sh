@@ -5,6 +5,7 @@
 #   md2pdf-typeset  is the only crate that may link the typst crate      (INV-10)
 #   md2pdf-paths    is the only crate that may touch the filesystem       (INV-9)
 #   the pure core   must contain nothing nondeterministic                 (INV-7)
+#   nothing anywhere may reach the network                                 (INV-1)
 #
 # The dependency graph already makes the first one impossible to violate by accident
 # (typst is not in the other manifests). This catches the second, and catches someone
@@ -71,5 +72,33 @@ if [ -n "$nondet" ]; then
   fail=1
 fi
 
-[ $fail -eq 0 ] && echo "boundaries OK: typst confined, fs confined, pure core deterministic"
+# INV-1: no network, ever. No accounts, no telemetry, no fetching — which is what makes
+# running cost ~zero and lets md2pdf work on a plane.
+#
+# Greps **Cargo.lock**, not the manifests. The realistic accident is not someone adding
+# HTTP deliberately; it is a convenience crate pulling in a stack transitively, and only
+# the lock file sees the resolved graph. Verified clean at 308 crates when this was
+# written.
+#
+# Honest limit: this is a denylist, so a network stack nobody listed passes silently. It
+# raises the cost of adding one; it does not make it impossible. `cargo-deny` would do
+# this properly by understanding the graph, and is not used because a gate that needs a
+# network fetch to install is not a gate that runs everywhere.
+net_crates='reqwest|ureq|hyper|tokio|native-tls|rustls|openssl|curl|isahc|attohttpc'
+net_crates="$net_crates|surf|socket2|mio|h2|quinn|async-std|smol|awc|tungstenite"
+netdeps=$(grep -nE "^name = \"($net_crates)\"" Cargo.lock || true)
+if [ -n "$netdeps" ]; then
+  echo "FAIL: a network-capable crate is in the dependency graph (INV-1):"
+  echo "$netdeps" | sed 's/^/  /'
+  fail=1
+fi
+
+netsrc=$(grep -rn --include='*.rs' -E '\bstd::net\b' crates | strip_comments || true)
+if [ -n "$netsrc" ]; then
+  echo "FAIL: network access in source (INV-1):"
+  echo "$netsrc" | sed 's/^/  /'
+  fail=1
+fi
+
+[ $fail -eq 0 ] && echo "boundaries OK: typst confined, fs confined, core deterministic, no network"
 exit $fail

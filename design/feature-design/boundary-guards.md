@@ -254,7 +254,7 @@ detection, not tamper resistance, the same reasoning as `ElementId` — so **G3 
 dependency**; and the pure core currently contains **no** `SystemTime`, `Instant`, `rand` or
 `std::env` at all, so the guard starts from a true state.
 
-### T23 · G1 — no network
+### ✅ T23 · G1 — no network *(built 2026-08-20)*
 
 - **Guard:** grep **`Cargo.lock`** for network-capable crates (`reqwest`, `ureq`, `hyper`, `tokio`,
   `native-tls`, `rustls`, `curl`, `isahc`, `attohttpc`, `surf`), plus `std::net` in source.
@@ -264,7 +264,7 @@ dependency**; and the pure core currently contains **no** `SystemTime`, `Instant
   confirm the guard fails. Then revert *and confirm the lock file is restored* — this is the one
   negative control that mutates a committed artefact, so cleanup must be checked, not assumed.
 
-**Doubt carried in:** the crate list is a denylist, and denylists are always incomplete — a network
+**Doubt carried in, and it stands:** the crate list is a denylist, and denylists are always incomplete — a network
 stack nobody listed passes silently. `cargo-deny` would do this properly by understanding the graph
 (D1). The mitigation is honesty in the failure message: this guard raises the cost of adding a
 network dependency; it does not make it impossible.

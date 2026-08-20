@@ -211,3 +211,26 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > 3c1's skeleton tests pass unchanged and are the regression suite for `ConvertSource`, which
   > keeps its own path rather than becoming a batch of one.
+
+- `<pending>` **feat: guard against network dependencies** (T23, G1).
+
+  > `check-boundaries.sh` gains a fourth rule: no network-capable crate anywhere in the dependency
+  > graph, and no `std::net` in source (INV-1).
+  >
+  > Greps **`Cargo.lock`, not the manifests** — and the negative control proved why that matters.
+  > Adding `ureq` to one crate pulled in **`rustls` transitively**; `rustls` appears nowhere in any
+  > manifest, so a manifest grep would have missed half the violation it was meant to catch. The
+  > realistic accident is never someone adding HTTP deliberately.
+  >
+  > Verified clean at 308 crates, so the guard starts from a true state rather than grandfathering
+  > an exception.
+  >
+  > **What it buys beyond protection:** "no network, ever" is the product's most marketable
+  > property — privacy, zero running cost, works offline. It was a promise held by memory. It is now
+  > an audit that runs on every build, which is a materially stronger thing to say on a download
+  > page.
+  >
+  > Honest limit, stated in the script itself: a denylist is never complete, so this raises the cost
+  > of adding a network stack without making it impossible. `cargo-deny` would do it properly by
+  > understanding the graph, and is not used because a gate that needs a network fetch to install is
+  > not a gate that runs everywhere.
