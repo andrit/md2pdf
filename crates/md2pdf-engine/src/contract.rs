@@ -16,7 +16,7 @@
 
 use std::path::PathBuf;
 
-use md2pdf_domain::Compromise;
+use md2pdf_domain::{BlanketResolution, Compromise};
 use serde::{Deserialize, Serialize};
 
 /// Something the user (or an adapter on their behalf) asked for.
@@ -30,6 +30,21 @@ pub enum Command {
     ConvertSource {
         source: PathBuf,
         destination: PathBuf,
+    },
+    /// Convert every Source under `source_root`, mirroring the tree beneath
+    /// `destination`.
+    ///
+    /// `on_collision` has **no default**, deliberately. Every possible default is
+    /// wrong: `OverwriteAll` destroys files nobody was asked about, and a silent
+    /// `SkipAll` looks like success while producing nothing. Requiring the field makes
+    /// each adapter state intent — a flag for the CLI, the answer to a prompt for a UI.
+    ///
+    /// `ConvertSource` is not a special case of this. Converting one file is the thing
+    /// a user does most often, and it keeps its own path.
+    ConvertBatch {
+        source_root: PathBuf,
+        destination: PathBuf,
+        on_collision: BlanketResolution,
     },
 }
 
@@ -48,23 +63,62 @@ pub enum Event {
     /// `compromises` travels from here on (`INV-4`): a concession not emitted cannot
     /// be recovered later, even though nothing consumes it until the attention gate.
     SourceConverted {
+        /// Which Source. Per-Source events are meaningless in a batch without it.
+        source: PathBuf,
         elements: usize,
         images: usize,
         compromises: Vec<Compromise>,
     },
     CompilationSucceeded {
+        source: PathBuf,
         pages: usize,
     },
     CompilationFailed {
+        source: PathBuf,
         message: String,
     },
     OutputWritten {
+        source: PathBuf,
         path: PathBuf,
     },
-    /// Anything else that stopped the Job — an unreadable Source, a refused overwrite.
+    /// Not converted, because its OutputPath was taken and the batch said so.
+    SourceSkipped {
+        source: PathBuf,
+        output: PathBuf,
+        reason: SkipReason,
+    },
+    /// This Source failed; the batch continues. Forty-nine good conversions must not
+    /// be lost to one malformed file.
+    SourceFailed {
+        source: PathBuf,
+        message: String,
+    },
+    /// The counts behind "47 converted cleanly, 3 need your attention" (`INV-5`).
+    BatchCompleted {
+        converted: usize,
+        flagged: usize,
+        skipped: usize,
+        failed: usize,
+    },
+    /// The Job itself could not proceed — an unwalkable root. Distinct from
+    /// `SourceFailed`, which is one document inside a Job that is otherwise fine.
     Failed {
         message: String,
     },
+}
+
+/// Why a Source was not converted.
+///
+/// Two cases that feel the same and are not: the user asked for skipping, or md2pdf
+/// could not find a free name. The second is not what anyone chose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipReason {
+    /// Resolved as `SkipAll`.
+    Collision,
+    /// `RenameAll`, but every candidate name was taken. Skipping is the only answer
+    /// left that does not overwrite (`INV-3`).
+    RenameExhausted,
 }
 
 /// Where events go.
@@ -84,6 +138,7 @@ mod tests {
     fn all_events() -> Vec<Event> {
         vec![
             Event::SourceConverted {
+                source: PathBuf::from("/docs/notes.md"),
                 elements: 12,
                 images: 2,
                 compromises: vec![Compromise {
@@ -92,12 +147,32 @@ mod tests {
                     page: None,
                 }],
             },
-            Event::CompilationSucceeded { pages: 4 },
+            Event::CompilationSucceeded {
+                source: PathBuf::from("/docs/notes.md"),
+                pages: 4,
+            },
             Event::CompilationFailed {
+                source: PathBuf::from("/docs/bad.md"),
                 message: "unclosed delimiter".into(),
             },
             Event::OutputWritten {
+                source: PathBuf::from("/docs/notes.md"),
                 path: PathBuf::from("/out/notes.pdf"),
+            },
+            Event::SourceSkipped {
+                source: PathBuf::from("/docs/taken.md"),
+                output: PathBuf::from("/out/taken.pdf"),
+                reason: SkipReason::Collision,
+            },
+            Event::SourceFailed {
+                source: PathBuf::from("/docs/bad.md"),
+                message: "unreadable".into(),
+            },
+            Event::BatchCompleted {
+                converted: 47,
+                flagged: 3,
+                skipped: 1,
+                failed: 1,
             },
             Event::Failed {
                 message: "source unreadable".into(),
@@ -127,11 +202,26 @@ mod tests {
         assert_eq!(back, command);
     }
 
+    #[test]
+    fn the_batch_command_survives_a_json_round_trip() {
+        let command = Command::ConvertBatch {
+            source_root: PathBuf::from("/docs"),
+            destination: PathBuf::from("/out"),
+            on_collision: md2pdf_domain::BlanketResolution::RenameAll,
+        };
+        let json = serde_json::to_string(&command).expect("serialise");
+        assert_eq!(
+            serde_json::from_str::<Command>(&json).expect("deserialise"),
+            command
+        );
+    }
+
     /// The wire format is a published surface. Renaming a variant is a deliberate
     /// break, so the tags are asserted rather than left to `rename_all`.
     #[test]
     fn the_wire_tags_are_what_we_think_they_are() {
         let json = serde_json::to_string(&Event::OutputWritten {
+            source: PathBuf::from("a.md"),
             path: PathBuf::from("/out/x.pdf"),
         })
         .unwrap();
@@ -161,9 +251,12 @@ mod tests {
                 sink(event);
             }
         }
-        assert_eq!(seen.len(), 5);
+        assert_eq!(seen.len(), 8);
         assert!(matches!(seen[0], Event::SourceConverted { .. }));
         assert!(matches!(seen[3], Event::OutputWritten { .. }));
+        assert!(matches!(seen[6], Event::BatchCompleted { .. }));
+        // Order is the property under test, so the last one is checked too.
+        assert!(matches!(seen[7], Event::Failed { .. }));
     }
 
     /// A compromise that reaches an adapter must still name its Element (`INV-4`).

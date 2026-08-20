@@ -43,7 +43,7 @@ fn run(source: &Path, destination: &Path) -> Vec<Event> {
 
 fn written_path(events: &[Event]) -> Option<&Path> {
     events.iter().find_map(|e| match e {
-        Event::OutputWritten { path } => Some(path.as_path()),
+        Event::OutputWritten { path, .. } => Some(path.as_path()),
         _ => None,
     })
 }
@@ -139,8 +139,10 @@ fn a_source_that_does_not_exist_fails_and_writes_nothing() {
     let events = run(&source, &out);
 
     assert!(
-        events.iter().any(|e| matches!(e, Event::Failed { .. })),
-        "expected a Failed event: {events:?}"
+        events
+            .iter()
+            .any(|e| matches!(e, Event::Failed { .. } | Event::SourceFailed { .. })),
+        "expected a failure event: {events:?}"
     );
     assert!(written_path(&events).is_none());
     assert!(
@@ -161,7 +163,9 @@ fn an_existing_output_is_refused_not_overwritten() {
     let events = run(&source, &out);
 
     assert!(
-        events.iter().any(|e| matches!(e, Event::Failed { .. })),
+        events
+            .iter()
+            .any(|e| matches!(e, Event::Failed { .. } | Event::SourceFailed { .. })),
         "expected a refusal: {events:?}"
     );
     let existing = PathBroker::new()
@@ -186,7 +190,219 @@ fn events_arrive_in_the_order_the_work_happened() {
             Event::CompilationFailed { .. } => "compile_failed",
             Event::OutputWritten { .. } => "written",
             Event::Failed { .. } => "failed",
+            Event::SourceSkipped { .. } => "skipped",
+            Event::SourceFailed { .. } => "source_failed",
+            Event::BatchCompleted { .. } => "batch_done",
         })
         .collect();
     assert_eq!(shape, vec!["converted", "compiled", "written"]);
+}
+
+// ---- Batch (T21) ------------------------------------------------------------
+
+use md2pdf_domain::BlanketResolution;
+
+fn run_batch(root: &Path, destination: &Path, on_collision: BlanketResolution) -> Vec<Event> {
+    let broker = PathBroker::new();
+    let typesetter = Typesetter::new();
+    let template = Template::default();
+    let deps = Deps {
+        broker: &broker,
+        typesetter: &typesetter,
+        template: &template,
+    };
+    let mut events = Vec::new();
+    let mut emit = |e: Event| events.push(e);
+    handle(
+        Command::ConvertBatch {
+            source_root: root.to_path_buf(),
+            destination: destination.to_path_buf(),
+            on_collision,
+        },
+        &deps,
+        &mut emit,
+    );
+    events
+}
+
+fn completion(events: &[Event]) -> (usize, usize, usize, usize) {
+    events
+        .iter()
+        .find_map(|e| match e {
+            Event::BatchCompleted {
+                converted,
+                flagged,
+                skipped,
+                failed,
+            } => Some((*converted, *flagged, *skipped, *failed)),
+            _ => None,
+        })
+        .expect("no BatchCompleted event")
+}
+
+#[test]
+fn a_directory_converts_with_the_tree_mirrored() {
+    let tmp = TempDir::new("batch");
+    tmp.write("docs/a.md", b"# A\n");
+    tmp.write("docs/guide/b.md", b"# B\n");
+    tmp.write("docs/guide/deep/c.md", b"# C\n");
+    tmp.write("docs/notes.txt", b"not a source");
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    assert_eq!(completion(&events), (3, 0, 0, 0));
+    // INV-12: mirrored, never flattened.
+    for expected in ["out/a.pdf", "out/guide/b.pdf", "out/guide/deep/c.pdf"] {
+        assert!(
+            tmp.join(expected).is_file(),
+            "missing {expected}; got {:?}",
+            events
+        );
+    }
+}
+
+#[test]
+fn one_unconvertible_source_does_not_end_the_batch() {
+    let tmp = TempDir::new("batch-bad");
+    tmp.write("docs/good1.md", b"# Fine\n");
+    // Invalid UTF-8: readable bytes, unreadable as text.
+    tmp.write("docs/bad.md", &[b'#', b' ', 0xFF, b'\n']);
+    tmp.write("docs/good2.md", b"# Also fine\n");
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    let (converted, _, _, failed) = completion(&events);
+    assert_eq!(converted, 2, "the good files should still convert");
+    assert_eq!(failed, 1);
+    assert!(tmp.join("out/good1.pdf").is_file());
+    assert!(tmp.join("out/good2.pdf").is_file());
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, Event::SourceFailed { .. })));
+}
+
+/// `INV-3`, at batch scale: an existing output survives untouched.
+#[test]
+fn skip_all_leaves_existing_output_untouched() {
+    let tmp = TempDir::new("batch-skip");
+    tmp.write("docs/a.md", b"# New content\n");
+    tmp.write("docs/b.md", b"# Fresh\n");
+    tmp.write("out/a.pdf", b"ORIGINAL");
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    let (converted, _, skipped, _) = completion(&events);
+    assert_eq!((converted, skipped), (1, 1));
+    assert_eq!(
+        PathBroker::new()
+            .read_bytes(&tmp.join("out/a.pdf"))
+            .expect("read"),
+        b"ORIGINAL",
+        "a skipped Source overwrote its output"
+    );
+}
+
+#[test]
+fn rename_all_writes_beside_the_existing_file() {
+    let tmp = TempDir::new("batch-rename");
+    tmp.write("docs/a.md", b"# New\n");
+    tmp.write("out/a.pdf", b"ORIGINAL");
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::RenameAll,
+    );
+
+    assert_eq!(completion(&events).0, 1);
+    assert!(tmp.join("out/a-1.pdf").is_file(), "no renamed output");
+    assert_eq!(
+        PathBroker::new()
+            .read_bytes(&tmp.join("out/a.pdf"))
+            .expect("read"),
+        b"ORIGINAL"
+    );
+}
+
+#[test]
+fn overwrite_all_replaces_only_because_it_was_asked_to() {
+    let tmp = TempDir::new("batch-over");
+    tmp.write("docs/a.md", b"# New\n");
+    tmp.write("out/a.pdf", b"ORIGINAL");
+
+    run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::OverwriteAll,
+    );
+
+    let now = PathBroker::new()
+        .read_bytes(&tmp.join("out/a.pdf"))
+        .expect("read");
+    assert!(now.starts_with(b"%PDF"), "the file was not replaced");
+}
+
+/// `INV-4` and `INV-5`: the counts behind "47 converted cleanly, 3 need your attention".
+#[test]
+fn flagged_sources_are_counted_separately_from_clean_ones() {
+    let tmp = TempDir::new("batch-flag");
+    tmp.write("docs/clean.md", b"# Nothing wrong here\n");
+    tmp.write("docs/flagged.md", b"![missing](gone.png)\n");
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    let (converted, flagged, _, _) = completion(&events);
+    assert_eq!(converted, 2, "both should convert — flagged is not failed");
+    assert_eq!(flagged, 1, "the missing image should flag exactly one");
+}
+
+#[test]
+fn an_unwalkable_root_fails_the_job_not_a_source() {
+    let tmp = TempDir::new("batch-noroot");
+    let events = run_batch(
+        &tmp.join("does-not-exist"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    assert!(
+        events.iter().any(|e| matches!(e, Event::Failed { .. })),
+        "expected a Job-level failure: {events:?}"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::BatchCompleted { .. })),
+        "a Job that never started should not report completion"
+    );
+}
+
+#[test]
+fn an_empty_directory_completes_with_zeroes() {
+    let tmp = TempDir::new("batch-empty");
+    std::hint::black_box(tmp.write("docs/ignored.txt", b"x"));
+
+    let events = run_batch(
+        &tmp.join("docs"),
+        &tmp.join("out"),
+        BlanketResolution::SkipAll,
+    );
+
+    assert_eq!(completion(&events), (0, 0, 0, 0));
 }

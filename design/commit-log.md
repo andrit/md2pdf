@@ -188,3 +188,26 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > exhausts memory on a 4 GB machine; it has bitten three times and gets likelier with every crate
   > that gains an integration test. Clippy has already compiled the graph, so the step is mostly
   > linking and serialising it costs little.
+
+- `<pending>` **feat(engine): convert a directory, mirroring the tree** (T21) — closes 3c2.
+
+  > `ConvertBatch` walks a SourceRoot, plans every write up front, and converts. `on_collision` is
+  > required with no default: `OverwriteAll` would destroy files nobody was asked about, and a
+  > silent `SkipAll` looks like success while producing nothing.
+  >
+  > Per-Source events gained a `source` — the contract reshape 3c1 predicted, done now while the
+  > only consumer is a test rather than guessed at then. `SourceFailed` is separate from `Failed`:
+  > one document failing inside a healthy Job is not the Job failing, and the batch continues.
+  > `SkipReason` distinguishes "you asked me to skip" from "every name was taken", which feel the
+  > same and are not.
+  >
+  > `clear_files` is finally called, and only here: one batch is one Job. Clearing between Sources
+  > would re-register a shared logo for every document and discard the `comemo` hit the long-lived
+  > World exists to keep — the deferral in 3c1 paying off exactly as intended.
+  >
+  > `Diagnostic::seal` is now on the live path, so `flagged` counts documents where either half of
+  > the pipeline conceded (INV-4). Flagged is not failed: a document with a missing image converts,
+  > and is counted separately (INV-5).
+  >
+  > 3c1's skeleton tests pass unchanged and are the regression suite for `ConvertSource`, which
+  > keeps its own path rather than becoming a batch of one.

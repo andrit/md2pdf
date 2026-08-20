@@ -9,11 +9,12 @@
 use std::path::{Path, PathBuf};
 
 use md2pdf_convert::{convert, ImageProbe, SourceContext};
-use md2pdf_domain::Template;
+use md2pdf_domain::{BlanketResolution, Diagnostic, Template};
 use md2pdf_paths::{output_path, PathBroker, PathError};
 use md2pdf_typeset::Typesetter;
 
-use crate::contract::{Command, Emit, Event};
+use crate::contract::{Command, Emit, Event, SkipReason};
+use crate::output::{plan, WriteMode};
 
 /// Everything the engine needs from the outside world.
 ///
@@ -66,15 +67,107 @@ pub fn handle(command: Command, deps: &Deps, emit: Emit) {
         Command::ConvertSource {
             source,
             destination,
-        } => match convert_source(&source, &destination, deps, emit) {
-            Ok(()) => {}
-            // The one place a Result becomes an Event.
-            Err(JobError::Compile(message)) => emit(Event::CompilationFailed { message }),
-            Err(other) => emit(Event::Failed {
-                message: other.to_string(),
-            }),
-        },
+        } => {
+            // One Source is still a Job, so the file map is cleared here too.
+            deps.typesetter.clear_files();
+            let output = output_path(&destination, &source, None);
+            report(
+                &source,
+                convert_one(&source, &output, WriteMode::New, deps, emit),
+                emit,
+            );
+        }
+        Command::ConvertBatch {
+            source_root,
+            destination,
+            on_collision,
+        } => convert_batch(&source_root, &destination, on_collision, deps, emit),
     }
+}
+
+/// Turn one Source's outcome into events. The only place a `Result` becomes an `Event`.
+fn report(source: &Path, outcome: Result<bool, JobError>, emit: Emit) {
+    match outcome {
+        // The flagged flag matters to a batch's counts, not to reporting.
+        Ok(_) => {}
+        Err(JobError::Compile(message)) => emit(Event::CompilationFailed {
+            source: source.to_path_buf(),
+            message,
+        }),
+        Err(other) => emit(Event::SourceFailed {
+            source: source.to_path_buf(),
+            message: other.to_string(),
+        }),
+    }
+}
+
+/// Convert every Source under a root, mirroring the tree.
+///
+/// Collisions are resolved **before any conversion begins** — see `output::plan`. One
+/// bad Source does not end the run: it is reported and the batch continues, because
+/// forty-nine good conversions must not be lost to one malformed file.
+fn convert_batch(
+    source_root: &Path,
+    destination: &Path,
+    on_collision: BlanketResolution,
+    deps: &Deps,
+    emit: Emit,
+) {
+    // One batch is one Job, so the file map is cleared once — here, and never between
+    // Sources. Virtual names are keyed by resolved path, so a logo shared by fifty
+    // documents is read and registered once; clearing per Source would throw away the
+    // `comemo` hit the long-lived World exists to keep.
+    deps.typesetter.clear_files();
+
+    let set = match deps.broker.walk(source_root) {
+        Ok(set) => set,
+        // The Job itself cannot proceed — distinct from one Source failing inside it.
+        Err(e) => {
+            emit(Event::Failed {
+                message: e.to_string(),
+            });
+            return;
+        }
+    };
+
+    let plan = plan(&set, destination, on_collision, deps.broker);
+
+    let mut converted = 0usize;
+    let mut flagged = 0usize;
+    let mut failed = 0usize;
+
+    for collision in &plan.skipped {
+        emit(Event::SourceSkipped {
+            source: collision.source.clone(),
+            output: collision.output.clone(),
+            reason: match on_collision {
+                BlanketResolution::RenameAll => SkipReason::RenameExhausted,
+                _ => SkipReason::Collision,
+            },
+        });
+    }
+
+    for write in &plan.writes {
+        match convert_one(&write.source, &write.output, write.mode, deps, emit) {
+            Ok(was_flagged) => {
+                converted += 1;
+                if was_flagged {
+                    flagged += 1;
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                report(&write.source, Err(e), emit);
+            }
+        }
+    }
+
+    emit(Event::BatchCompleted {
+        converted,
+        flagged,
+        skipped: plan.skipped.len(),
+        failed,
+    });
 }
 
 /// Existence, answered by the one crate allowed to ask.
@@ -90,12 +183,14 @@ impl ImageProbe for BrokerImages<'_> {
     }
 }
 
-fn convert_source(
+/// Read, convert, compile, write — one Source. Returns whether it was flagged.
+fn convert_one(
     source: &Path,
-    destination: &Path,
+    output: &Path,
+    mode: WriteMode,
     deps: &Deps,
     emit: Emit,
-) -> Result<(), JobError> {
+) -> Result<bool, JobError> {
     let markdown = deps
         .broker
         .read_to_string(source)
@@ -109,6 +204,7 @@ fn convert_source(
     let conversion = convert(&markdown, &context);
 
     emit(Event::SourceConverted {
+        source: source.to_path_buf(),
         elements: conversion.elements.len(),
         images: conversion.images.len(),
         compromises: conversion.compromises.clone(),
@@ -128,10 +224,15 @@ fn convert_source(
         deps.typesetter.add_file(virtual_name, bytes);
     }
 
-    let (decisions, _diagnostic) = deps
+    let (decisions, _) = deps
         .typesetter
         .probe(&conversion.elements, deps.template)
         .map_err(|e| JobError::Compile(e.to_string()))?;
+
+    // Both halves of the pipeline concede, and only a sealed Diagnostic carries both
+    // (`INV-4`). Flagged is not failed: the document converted, and something in it
+    // needed a judgment call.
+    let diagnostic = Diagnostic::seal(conversion.compromises.clone(), &decisions);
 
     let compilation = deps
         .typesetter
@@ -143,16 +244,21 @@ fn convert_source(
         .map_err(|e| JobError::Compile(e.to_string()))?;
 
     emit(Event::CompilationSucceeded {
+        source: source.to_path_buf(),
         pages: compilation.page_count(),
     });
 
-    // `write_new`, not `overwrite` (`INV-3`). Collision resolution is 3c2; until the
-    // user has actually been asked, refusing is the only honest answer.
-    let out = output_path(destination, source, None);
-    deps.broker
-        .write_new(&out, &pdf)
-        .map_err(JobError::OutputUnwritable)?;
+    // `overwrite` only where the plan says a Collision was resolved that way — a
+    // recorded human decision, never a default (`INV-3`).
+    match mode {
+        WriteMode::New => deps.broker.write_new(output, &pdf),
+        WriteMode::Replace => deps.broker.overwrite(output, &pdf),
+    }
+    .map_err(JobError::OutputUnwritable)?;
 
-    emit(Event::OutputWritten { path: out });
-    Ok(())
+    emit(Event::OutputWritten {
+        source: source.to_path_buf(),
+        path: output.to_path_buf(),
+    });
+    Ok(diagnostic.is_flagged())
 }
