@@ -3,7 +3,7 @@
 //! This is the library equivalent of `typst query` / `typst eval`, which are CLI-only
 //! features md2pdf cannot use. The introspector is the in-process query surface.
 
-use md2pdf_domain::{Decision, DecisionMap, Element, Rung};
+use md2pdf_domain::{Decision, DecisionMap, Element, Orientation, Reduction};
 use typst::introspection::{Introspector, MetadataElem};
 use typst_layout::PagedDocument;
 
@@ -29,18 +29,35 @@ pub fn harvest(doc: &PagedDocument, elements: &[Element]) -> Result<DecisionMap,
 
         let size_pt = v["size"].as_f64().unwrap_or(0.0);
         let factor = v["factor"].as_f64().unwrap_or(1.0);
-        let rung = match v["rung"].as_str().ok_or_else(|| bad(v, "rung"))? {
-            "none" => Rung::None,
-            "shrink" => Rung::Shrink { size_pt },
-            "scale" => Rung::Scale { factor },
-            "rotate" => Rung::Rotate,
-            "clip" => Rung::Clip,
-            other => return Err(TypesetError::Harvest(format!("unknown rung {other:?}"))),
+
+        let orientation = match v["orientation"]
+            .as_str()
+            .ok_or_else(|| bad(v, "orientation"))?
+        {
+            "portrait" => Orientation::Portrait,
+            "landscape" => Orientation::Landscape,
+            other => {
+                return Err(TypesetError::Harvest(format!(
+                    "unknown orientation {other:?}"
+                )))
+            }
+        };
+        let reduction = match v["reduction"].as_str().ok_or_else(|| bad(v, "reduction"))? {
+            "none" => Reduction::None,
+            "shrink" => Reduction::Shrink { size_pt },
+            "scale" => Reduction::Scale { factor },
+            "clip" => Reduction::Clip,
+            other => {
+                return Err(TypesetError::Harvest(format!(
+                    "unknown reduction {other:?}"
+                )))
+            }
         };
 
         decisions.push(Decision {
             id: element.id,
-            rung,
+            orientation,
+            reduction,
             natural_pt: v["natural"].as_f64().ok_or_else(|| bad(v, "natural"))?,
             available_pt: v["available"].as_f64().ok_or_else(|| bad(v, "available"))?,
         });

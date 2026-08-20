@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::decision::{DecisionMap, Rung};
+use crate::decision::{DecisionMap, Orientation, Reduction};
 use crate::element::ElementId;
 
 /// One recorded concession. The central noun of the design: it is what makes
@@ -55,24 +55,36 @@ impl Diagnostic {
         !self.compromises.is_empty()
     }
 
+    /// Build a Diagnostic from the ProbePass's decisions.
+    ///
+    /// An Element can concede on **both** axes — rotated *and* shrunk is the ordinary
+    /// outcome once landscape re-measurement exists — so each non-default axis
+    /// contributes its own Compromise. The attention list then reads "rotated, and
+    /// shrunk to 7pt" rather than needing a composite kind per combination.
     pub fn from_decisions(map: &DecisionMap) -> Self {
-        let compromises = map
-            .compromises()
-            .filter_map(|d| {
-                let kind = match d.rung {
-                    Rung::Shrink { size_pt } => CompromiseKind::ShrunkToFloor { size_pt },
-                    Rung::Scale { factor } => CompromiseKind::Scaled { factor },
-                    Rung::Rotate => CompromiseKind::Rotated,
-                    Rung::Clip => CompromiseKind::Clipped,
-                    Rung::None => return None,
-                };
-                Some(Compromise {
+        let mut compromises = Vec::new();
+        for d in map.compromises() {
+            if d.orientation == Orientation::Landscape {
+                compromises.push(Compromise {
+                    id: d.id,
+                    kind: CompromiseKind::Rotated,
+                    page: None,
+                });
+            }
+            let kind = match d.reduction {
+                Reduction::Shrink { size_pt } => Some(CompromiseKind::ShrunkToFloor { size_pt }),
+                Reduction::Scale { factor } => Some(CompromiseKind::Scaled { factor }),
+                Reduction::Clip => Some(CompromiseKind::Clipped),
+                Reduction::None => None,
+            };
+            if let Some(kind) = kind {
+                compromises.push(Compromise {
                     id: d.id,
                     kind,
                     page: None,
-                })
-            })
-            .collect();
+                });
+            }
+        }
         Self { compromises }
     }
 }

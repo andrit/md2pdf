@@ -1,7 +1,7 @@
 # Plan — finish the escalation ladder (phase 3b2, T14)
 
 **Written:** 2026-08-19 · **Follows:** 3b (images), which is where the gap surfaced.
-**Goal:** all four rungs of the ladder are reachable, and an element that cannot fit is clipped and
+**Status:** ✅ complete 2026-08-20 · **Goal:** all four rungs of the ladder are reachable, and an element that cannot fit is clipped and
 visibly marked rather than silently overflowing.
 
 Not an images task — it affects **tables as much as images**, which is why it was lifted out of 3b.

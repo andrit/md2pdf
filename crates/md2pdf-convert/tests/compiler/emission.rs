@@ -1,7 +1,7 @@
 //! The §1.1 body invariant, enforced against the real compiler.
 //!
 //! Every emitted body is interpolated into Typst source in three positions:
-//! raw at top level (`Rung::None`), inside a content block (`[...]`, used by every
+//! raw at top level (`Reduction::None`), inside a content block (`[...]`, used by every
 //! shrink/rotate/clip), and inside the ProbePass harness alongside `measure()`.
 //!
 //! A body that is valid in one and not another does not fail loudly — in the probe
@@ -10,7 +10,7 @@
 //! emits.
 
 use md2pdf_convert::{emit::emit, parse::parse, SourceContext};
-use md2pdf_domain::{Decision, DecisionMap, Element, Rung, Template};
+use md2pdf_domain::{Decision, DecisionMap, Element, Orientation, Reduction, Template};
 use md2pdf_typeset::Typesetter;
 
 /// One document exercising every construct the emitter can produce, including the
@@ -105,18 +105,21 @@ fn the_whole_corpus_compiles_in_every_render_position() {
     let elements = elements();
     let template = template();
 
-    for rung in [
-        Rung::None,
-        Rung::Shrink { size_pt: 8.0 },
-        Rung::Rotate,
-        Rung::Clip,
+    // Both axes, in the combinations the ladder can actually produce.
+    for (orientation, reduction) in [
+        (Orientation::Portrait, Reduction::None),
+        (Orientation::Portrait, Reduction::Shrink { size_pt: 8.0 }),
+        (Orientation::Landscape, Reduction::None),
+        (Orientation::Landscape, Reduction::Shrink { size_pt: 8.0 }),
+        (Orientation::Portrait, Reduction::Clip),
     ] {
         let map = DecisionMap {
             decisions: elements
                 .iter()
                 .map(|el| Decision {
                     id: el.id,
-                    rung,
+                    orientation,
+                    reduction,
                     natural_pt: 0.0,
                     available_pt: 0.0,
                 })
@@ -124,8 +127,11 @@ fn the_whole_corpus_compiles_in_every_render_position() {
         };
         let compilation = Typesetter::new()
             .render(&elements, &template, &map)
-            .unwrap_or_else(|e| panic!("corpus failed to render at {rung:?}: {e}"));
-        assert!(compilation.page_count() > 0, "no pages at {rung:?}");
+            .unwrap_or_else(|e| panic!("corpus failed at {orientation:?}/{reduction:?}: {e}"));
+        assert!(
+            compilation.page_count() > 0,
+            "no pages at {orientation:?}/{reduction:?}"
+        );
     }
 }
 

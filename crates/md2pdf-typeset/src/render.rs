@@ -5,7 +5,7 @@
 //! structure, not style. Making template authors handle decision logic would break
 //! that separation. See `design/GLOSSARY.md`, "Template".
 
-use md2pdf_domain::{DecisionMap, Element, Rung, Template};
+use md2pdf_domain::{Decision, DecisionMap, Element, Orientation, Reduction, Template};
 
 pub fn render_source(elements: &[Element], template: &Template, map: &DecisionMap) -> String {
     let mut s = String::new();
@@ -22,48 +22,47 @@ pub fn render_source(elements: &[Element], template: &Template, map: &DecisionMa
     ));
 
     for el in elements {
-        let rung = map.get(&el.id).map(|d| d.rung).unwrap_or(Rung::None);
-        match rung {
-            Rung::None => {
-                s.push_str(&format!("{}\n#v(0.65em)\n", el.body));
+        let default = Decision::fits(el.id, 0.0, 0.0);
+        let decision = map.get(&el.id).unwrap_or(&default);
+
+        // The two axes compose: reduce the body, then place it. Neither step needs to
+        // know what the other chose, which is the point of splitting them.
+        let reduced = reduce(&el.body.to_string(), decision.reduction, template);
+        match decision.orientation {
+            Orientation::Portrait => {
+                s.push_str(&format!("{reduced}\n#v(0.65em)\n"));
             }
-            Rung::Shrink { size_pt } => {
-                s.push_str(&format!(
-                    "#text(size: {size_pt}pt)[{}]\n#v(0.65em)\n",
-                    el.body
-                ));
-            }
-            Rung::Scale { factor } => {
-                // `reflow: true` is load-bearing. Typst's scale is a visual transform
-                // by default — "scales content without affecting layout" — so without
-                // it the element would draw smaller while still reserving its full
-                // original width, leaving the overflow exactly where it was.
-                let factor = factor.clamp(0.05, 1.0);
-                s.push_str(&format!(
-                    "#scale({:.2}%, reflow: true)[{}]\n#v(0.65em)\n",
-                    factor * 100.0,
-                    el.body
-                ));
-            }
-            Rung::Rotate => {
+            Orientation::Landscape => {
                 // Legal at top level. Illegal inside `layout()`, which is one reason
-                // the ProbePass does not use it.
-                //
-                // No size is carried over from the probe: landscape offers far more
-                // width, so the element is re-measured here at base size.
+                // the ProbePass does not use it. The size was already chosen against
+                // the landscape width by the probe — nothing is re-measured here,
+                // because the RenderPass never measures.
                 s.push_str(&format!(
-                    "#page(flipped: true, margin: {}pt)[{}]\n",
-                    template.margin_pt, el.body
-                ));
-            }
-            Rung::Clip => {
-                s.push_str(&format!(
-                    "#block(width: 100%, clip: true)[{}]\n\
-                     #text(size: 7pt, fill: red)[[clipped]]\n#v(0.65em)\n",
-                    el.body
+                    "#page(flipped: true, margin: {}pt)[{reduced}]\n",
+                    template.margin_pt
                 ));
             }
         }
     }
     s
+}
+
+fn reduce(body: &str, reduction: Reduction, template: &Template) -> String {
+    match reduction {
+        Reduction::None => body.to_string(),
+        Reduction::Shrink { size_pt } => format!("#text(size: {size_pt}pt)[{body}]"),
+        Reduction::Scale { factor } => {
+            // `reflow: true` is load-bearing. Typst's scale is a visual transform by
+            // default — "scales content without affecting layout" — so without it the
+            // element would draw smaller while still reserving its original width,
+            // leaving the overflow exactly where it was.
+            let factor = factor.clamp(0.05, 1.0);
+            format!("#scale({:.2}%, reflow: true)[{body}]", factor * 100.0)
+        }
+        Reduction::Clip => format!(
+            "#block(width: 100%, clip: true)[{body}]\n\
+             #text(size: {}pt, fill: red)[[clipped]]",
+            template.floors.table_pt
+        ),
+    }
 }

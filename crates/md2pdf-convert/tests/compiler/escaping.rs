@@ -7,7 +7,9 @@
 //! harness, so the test exercises exactly what ships.
 
 use md2pdf_convert::escape::escape;
-use md2pdf_domain::{Decision, DecisionMap, Element, ElementClass, Markup, Rung, Template};
+use md2pdf_domain::{
+    Decision, DecisionMap, Element, ElementClass, Markup, Orientation, Reduction, Template,
+};
 use md2pdf_typeset::Typesetter;
 
 /// Render one piece of escaped text and return the plain text Typst produced.
@@ -15,12 +17,13 @@ use md2pdf_typeset::Typesetter;
 /// `rung` selects the syntactic position the body lands in — `None` puts it raw at
 /// top level, everything else wraps it in a content block `[...]`. Both are
 /// production paths; see `design/plan-conversion-crate.md` §1.1.
-fn render_text(input: &str, rung: Rung) -> Result<String, String> {
+fn render_text(input: &str, reduction: Reduction) -> Result<String, String> {
     let el = Element::new(0, ElementClass::Prose, Markup::raw(escape(input)));
     let map = DecisionMap {
         decisions: vec![Decision {
             id: el.id,
-            rung,
+            orientation: Orientation::Portrait,
+            reduction,
             natural_pt: 0.0,
             available_pt: 0.0,
         }],
@@ -76,7 +79,7 @@ fn candidates() -> Vec<(String, String)> {
 fn report_roundtrip_failures() {
     let mut broken = Vec::new();
     for (name, input) in candidates() {
-        match render_text(&input, Rung::None) {
+        match render_text(&input, Reduction::None) {
             Ok(out) if normalise(&out) == normalise(&input) => {}
             Ok(out) => broken.push(format!(
                 "MANGLED {name:<28} {input:?} -> {:?}",
@@ -98,7 +101,7 @@ fn report_roundtrip_failures() {
 #[test]
 fn text_survives_round_trip_at_top_level() {
     for (name, input) in candidates() {
-        let out = render_text(&input, Rung::None)
+        let out = render_text(&input, Reduction::None)
             .unwrap_or_else(|e| panic!("{name}: {input:?} failed to compile: {e}"));
         assert_eq!(
             normalise(&out),
@@ -129,8 +132,8 @@ fn escaped_text_cannot_corrupt_the_probe_harness() {
             .get(&id)
             .unwrap_or_else(|| panic!("{name}: {input:?} produced no decision"));
         assert_eq!(
-            decision.rung,
-            Rung::None,
+            decision.reduction,
+            Reduction::None,
             "{name}: {input:?} — Prose is Wrappable and must never escalate"
         );
     }
@@ -141,7 +144,7 @@ fn text_survives_round_trip_inside_a_content_block() {
     // The position every probe uses. An unbalanced bracket here corrupts the
     // harness itself, so this is the case that matters most.
     for (name, input) in candidates() {
-        let out = render_text(&input, Rung::Clip)
+        let out = render_text(&input, Reduction::Clip)
             .unwrap_or_else(|e| panic!("{name}: {input:?} failed to compile: {e}"));
         let out = normalise(&out);
         let expected = normalise(&input);

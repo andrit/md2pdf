@@ -55,7 +55,7 @@ Detail lives in the phase plans; this is the index.
 | T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ `f6da45d` |
 | T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ `ba34fec` |
 | T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ `447182a` |
-| T14 | Finish the ladder — rotate+scale, `clip` finally emitted | 3b2 | ☐ next |
+| T14 | Finish the ladder — two axes, landscape re-measure, `clip` reachable | 3b2 | ✅ staged |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.
@@ -71,7 +71,7 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 2 | Structure — workspace, toolchain, verify gate | ✅ done 2026-08-17 | `verify.sh` |
 | **3a** | **Conversion, Stage 1 — text** | **✅ code-complete 2026-08-18 (T5–T8); `/phase-audit` not yet run** | `/phase-audit` + `verify.sh` |
 | 3b | Images, Stage 2 | ✅ code-complete 2026-08-19 (T10–T13); `/phase-audit` not run | `/phase-audit` |
-| **3b2** | **Finish the escalation ladder** — all atomic classes | **◐ current (T14)** | `/phase-audit` |
+| 3b2 | Finish the escalation ladder — all atomic classes | ✅ code-complete 2026-08-20 (T14); `/phase-audit` not run | `/phase-audit` |
 | 3c1 | Engine — **walking skeleton**: one file, disk to disk | planned | `/phase-audit` |
 | 3c2 | Paths + Output — widen to batch, collisions | planned | `/phase-audit` |
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
@@ -143,8 +143,14 @@ and it has been open since the spike first flagged it.
 Doing it now, before 3d tunes floors by eye and before 3f offers overrides, because both of those
 assume the ladder means what the design says it means.
 
-**Exit:** an element too wide even for landscape is clipped and visibly marked; the ladder's four
-rungs are all reachable.
+**Exit criteria — all met 2026-08-20:**
+
+- ✅ `Reduction::Clip` is reachable; a 40-column table clips rather than overflowing silently
+- ✅ rotation re-measures against the landscape width and does not inherit the portrait floor
+- ✅ a clipped element carries a visible red marker, confirmed by eye
+- ✅ both axes compose: `Landscape + Clip` yields two Compromises, `[Rotated, Clipped]`
+- ✅ `verify.sh` green
+- ⚠️ `/phase-audit` not run — unavailable in this environment, as in 3a and 3b
 
 ## 3c · Engine, Paths, Output — **vertical slice first** *(revised 2026-08-19)*
 

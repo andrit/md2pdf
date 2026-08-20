@@ -80,4 +80,14 @@ impl Template {
     pub fn available_pt(&self) -> f64 {
         self.page_width_pt - 2.0 * self.margin_pt
     }
+
+    /// Available width once the page is flipped — what a rotated Element is
+    /// re-measured against.
+    ///
+    /// Arithmetic, not a second layout: flipping swaps the page dimensions, so the
+    /// width becomes the page height less the same margins. Both passes read it from
+    /// here rather than each knowing the rule.
+    pub fn available_landscape_pt(&self) -> f64 {
+        self.page_height_pt - 2.0 * self.margin_pt
+    }
 }

@@ -5,6 +5,19 @@
 //! layout and yields identical decisions. `layout()` was also the only construct
 //! that made the two-pass split mandatory; the split is now kept for cost, not
 //! legality. See `design/spike-typst-measure-findings.md`.
+//!
+//! ## Both axes are decided here
+//!
+//! The RenderPass never measures, so **every** measurement-dependent choice is made in
+//! this pass — including what happens *after* a rotation. The GLOSSARY requires it:
+//!
+//! > RE-MEASURE in landscape; do not inherit the portrait size.
+//! > Carrying the Floor size over is a bug.
+//!
+//! So an Element that will not fit portrait is measured a second time against the
+//! landscape width, and reduction is chosen there. Only when even that fails does it
+//! clip. The second pass costs nothing in the common case, because it runs only for
+//! Elements that already failed the first.
 
 use std::fmt::Write;
 
@@ -14,6 +27,7 @@ use md2pdf_domain::{Element, Template};
 /// the page flow.
 pub fn probe_source(elements: &[Element], template: &Template) -> String {
     let avail = template.available_pt();
+    let land = template.available_landscape_pt();
     let base = template.base_size_pt;
     let mut s = String::new();
 
@@ -33,65 +47,8 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
 
     for el in elements {
         let order = el.id.order;
-        let floor = template.floors.for_class(el.class);
 
-        if el.class.is_atomic() && el.class.shrinks_by_scale() {
-            // Scaling content — images. Deciding this is arithmetic, not a search:
-            // the required factor is available/natural. The font-size ladder below
-            // cannot move an image at all (its width does not depend on text size),
-            // so running it here would measure the same number ~20 times and then
-            // fall through to Rotate. That was the bug T13 fixes.
-            write!(
-                s,
-                r#"  {{
-    let body = [{body}]
-    let natural = measure(body).width
-    let required = if natural > 0pt {{ {avail}pt / natural }} else {{ 1.0 }}
-    let rung = if required >= 1.0 {{ "none" }} else if required >= {floor} {{ "scale" }} else {{ "rotate" }}
-    [#metadata((
-      order: {order},
-      rung: rung,
-      size: 0.0,
-      factor: if required < 1.0 {{ required }} else {{ 1.0 }},
-      natural: natural.pt(),
-      available: {avail},
-    )) <d>]
-  }}
-"#,
-                body = el.body,
-                floor = template.floors.image_scale,
-            )
-            .expect("string write");
-        } else if el.class.is_atomic() {
-            // Text-bearing atomic content — tables. Linear scan in 0.5pt steps: ~7
-            // measurements per element, and it dominates probe cost. A binary search
-            // would cut it to ~3 — noted in the findings, not taken yet.
-            write!(
-                s,
-                r#"  {{
-    let body = [{body}]
-    let natural = measure(body).width
-    let chosen = none
-    let s = {base}pt
-    while s >= {floor}pt and chosen == none {{
-      if measure(text(size: s, body)).width <= {avail}pt {{ chosen = s }}
-      s = s - 0.5pt
-    }}
-    let rung = if chosen == {base}pt {{ "none" }} else if chosen != none {{ "shrink" }} else {{ "rotate" }}
-    [#metadata((
-      order: {order},
-      rung: rung,
-      size: if chosen == none {{ 0.0 }} else {{ chosen.pt() }},
-      factor: 1.0,
-      natural: natural.pt(),
-      available: {avail},
-    )) <d>]
-  }}
-"#,
-                body = el.body,
-            )
-            .expect("string write");
-        } else {
+        if !el.class.is_atomic() {
             // Wrappable: reflows to any width, so it cannot overflow horizontally and
             // the ladder is skipped. Measured anyway so the Diagnostic carries a real
             // natural width.
@@ -101,11 +58,111 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
     let body = [{body}]
     [#metadata((
       order: {order},
-      rung: "none",
+      orientation: "portrait",
+      reduction: "none",
       size: 0.0,
       factor: 1.0,
       natural: measure(body).width.pt(),
       available: {avail},
+    )) <d>]
+  }}
+"#,
+                body = el.body,
+            )
+            .expect("string write");
+        } else if el.class.shrinks_by_scale() {
+            // Scaling content — images. The required factor is arithmetic
+            // (available / natural); stepping font size cannot move an image at all.
+            write!(
+                s,
+                r#"  {{
+    let body = [{body}]
+    let natural = measure(body).width
+    let needed(space) = if natural > 0pt {{ space / natural }} else {{ 1.0 }}
+    let orientation = "portrait"
+    let reduction = "none"
+    let factor = 1.0
+    let available = {avail}
+    let p = needed({avail}pt)
+    if p >= 1.0 {{
+    }} else if p >= {floor} {{
+      reduction = "scale"
+      factor = p
+    }} else {{
+      orientation = "landscape"
+      available = {land}
+      let l = needed({land}pt)
+      if l >= 1.0 {{
+      }} else if l >= {floor} {{
+        reduction = "scale"
+        factor = l
+      }} else {{
+        reduction = "clip"
+      }}
+    }}
+    [#metadata((
+      order: {order},
+      orientation: orientation,
+      reduction: reduction,
+      size: 0.0,
+      factor: factor,
+      natural: natural.pt(),
+      available: available,
+    )) <d>]
+  }}
+"#,
+                body = el.body,
+                floor = template.floors.image_scale,
+            )
+            .expect("string write");
+        } else {
+            // Text-bearing atomic content — tables. Linear scan in 0.5pt steps: ~7
+            // measurements per element per orientation, and it dominates probe cost.
+            // A binary search would cut it to ~3 — noted in the findings, not taken.
+            let floor = template.floors.for_class(el.class);
+            write!(
+                s,
+                r#"  {{
+    let body = [{body}]
+    let natural = measure(body).width
+    let choose(space) = {{
+      let chosen = none
+      let s = {base}pt
+      while s >= {floor}pt and chosen == none {{
+        if measure(text(size: s, body)).width <= space {{ chosen = s }}
+        s = s - 0.5pt
+      }}
+      chosen
+    }}
+    let orientation = "portrait"
+    let reduction = "none"
+    let size = 0.0
+    let available = {avail}
+    let p = choose({avail}pt)
+    if p == {base}pt {{
+    }} else if p != none {{
+      reduction = "shrink"
+      size = p.pt()
+    }} else {{
+      orientation = "landscape"
+      available = {land}
+      let l = choose({land}pt)
+      if l == {base}pt {{
+      }} else if l != none {{
+        reduction = "shrink"
+        size = l.pt()
+      }} else {{
+        reduction = "clip"
+      }}
+    }}
+    [#metadata((
+      order: {order},
+      orientation: orientation,
+      reduction: reduction,
+      size: size,
+      factor: 1.0,
+      natural: natural.pt(),
+      available: available,
     )) <d>]
   }}
 "#,

@@ -14,7 +14,8 @@
 //! guessed.
 
 use md2pdf_domain::{
-    Decision, DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Rung, Template,
+    Decision, DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Orientation,
+    Reduction, Template,
 };
 use md2pdf_typeset::Typesetter;
 
@@ -103,11 +104,11 @@ fn wide_table_escalates_to_rotate() {
     let map = probe(&els);
     let d = map.get(&els[0].id).expect("decision for the table");
     assert_eq!(
-        d.rung,
-        Rung::Rotate,
+        d.orientation,
+        Orientation::Landscape,
         "a 6-column table at 196pt must reach the floor and still not fit; got {:?} \
          (natural {:.2}pt)",
-        d.rung,
+        d.orientation,
         d.natural_pt
     );
 }
@@ -116,7 +117,7 @@ fn wide_table_escalates_to_rotate() {
 fn narrow_table_is_left_alone() {
     let els = vec![narrow_table()];
     let map = probe(&els);
-    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+    assert_eq!(map.get(&els[0].id).unwrap().reduction, Reduction::None);
 }
 
 #[test]
@@ -127,7 +128,7 @@ fn prose_never_overflows_because_it_wraps() {
     let els = vec![prose()];
     let map = probe(&els);
     let d = map.get(&els[0].id).unwrap();
-    assert_eq!(d.rung, Rung::None);
+    assert_eq!(d.reduction, Reduction::None);
     assert!(
         d.natural_pt > d.available_pt,
         "precondition: prose natural width should exceed available, else this test \
@@ -147,8 +148,8 @@ fn an_oversized_figure_scales_before_it_rotates() {
     // Rotate. Scaling is lossless for an image; a whole landscape page is not.
     let els = vec![figure()];
     let map = probe(&els);
-    match map.get(&els[0].id).unwrap().rung {
-        Rung::Scale { factor } => {
+    match map.get(&els[0].id).unwrap().reduction {
+        Reduction::Scale { factor } => {
             assert!(
                 (0.45..0.55).contains(&factor),
                 "expected ~0.49, got {factor}"
@@ -168,7 +169,8 @@ fn a_figure_below_the_scale_floor_rotates_instead() {
         Markup::raw("#rect(width: 1000pt, height: 30pt)"),
     )];
     let map = probe(&els);
-    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::Rotate);
+    let d = map.get(&els[0].id).unwrap();
+    assert_eq!(d.orientation, Orientation::Landscape);
 }
 
 #[test]
@@ -185,7 +187,8 @@ fn a_scaled_element_really_occupies_less_space() {
             &DecisionMap {
                 decisions: vec![Decision {
                     id: el.id,
-                    rung: Rung::Scale { factor: 0.25 },
+                    orientation: Orientation::Portrait,
+                    reduction: Reduction::Scale { factor: 0.25 },
                     natural_pt: 400.0,
                     available_pt: 196.0,
                 }],
@@ -219,7 +222,7 @@ fn raw_blocks_wrap_so_code_is_wrappable() {
     assert!(!ElementClass::Code.is_atomic());
     let els = vec![code()];
     let map = probe(&els);
-    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+    assert_eq!(map.get(&els[0].id).unwrap().reduction, Reduction::None);
 }
 
 #[test]
@@ -319,15 +322,31 @@ fn a_stale_override_is_rejected_not_misapplied() {
     // Same position, different content: the Source was edited externally.
     let edited = ElementId::new(els[0].id.order, "#table(columns: 2, [a], [b])");
     assert!(
-        !map.apply_override(&edited, Rung::None),
+        !map.apply_override(&edited, Some(Orientation::Portrait), None),
         "an Override whose content hash no longer matches must be dropped, not \
          applied to whatever now occupies that position"
     );
-    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::Rotate, "unchanged");
+    assert_eq!(
+        map.get(&els[0].id).unwrap().orientation,
+        Orientation::Landscape,
+        "unchanged"
+    );
 
-    // The live id still works.
-    assert!(map.apply_override(&els[0].id, Rung::None));
-    assert_eq!(map.get(&els[0].id).unwrap().rung, Rung::None);
+    // The live id still works — and setting one axis leaves the other alone, which is
+    // the property the two-axis split exists for. "Force portrait" must not silently
+    // discard the shrink the probe chose.
+    let before = map.get(&els[0].id).unwrap().reduction;
+    assert!(map.apply_override(&els[0].id, Some(Orientation::Portrait), None));
+    let after = map.get(&els[0].id).unwrap();
+    assert_eq!(
+        after.orientation,
+        Orientation::Portrait,
+        "orientation not applied"
+    );
+    assert_eq!(
+        after.reduction, before,
+        "reduction was disturbed by an orientation override"
+    );
 }
 
 /// Emphasis must actually render in an italic face.
@@ -526,7 +545,10 @@ fn a_real_image_enters_the_ladder_by_scale_not_by_font_size() {
     let (map, _) = ts
         .probe(std::slice::from_ref(&huge), &template())
         .expect("probe");
-    assert_eq!(map.get(&huge.id).unwrap().rung, Rung::Rotate);
+    assert_eq!(
+        map.get(&huge.id).unwrap().orientation,
+        Orientation::Landscape
+    );
 
     // The same image on a page wide enough that ~30% suffices must SCALE instead.
     let wide_page = Template {
@@ -536,8 +558,8 @@ fn a_real_image_enters_the_ladder_by_scale_not_by_font_size() {
     let (map, _) = ts
         .probe(std::slice::from_ref(&huge), &wide_page)
         .expect("probe");
-    match map.get(&huge.id).unwrap().rung {
-        Rung::Scale { factor } => assert!((0.25..0.40).contains(&factor), "got {factor}"),
+    match map.get(&huge.id).unwrap().reduction {
+        Reduction::Scale { factor } => assert!((0.25..0.40).contains(&factor), "got {factor}"),
         other => panic!("expected Scale on the wider page, got {other:?}"),
     }
 }
@@ -554,6 +576,119 @@ fn a_small_image_is_left_alone() {
     let (map, diag) = ts
         .probe(std::slice::from_ref(&el), &template())
         .expect("probe");
-    assert_eq!(map.get(&el.id).unwrap().rung, Rung::None);
+    assert_eq!(map.get(&el.id).unwrap().reduction, Reduction::None);
     assert!(!diag.is_flagged(), "a fitting image is not a compromise");
+}
+
+// ---- The ladder's tail (T14) -----------------------------------------------
+
+/// A table too wide for portrait must be **re-measured in landscape**, not rotated at
+/// its portrait floor.
+///
+/// The GLOSSARY is explicit — "RE-MEASURE in landscape; do not inherit the portrait
+/// size… Carrying the Floor size over is a bug" — and until T14 the RenderPass simply
+/// rendered a rotated element at natural size, because it never measures.
+#[test]
+fn a_rotated_element_is_remeasured_in_landscape() {
+    let els = vec![wide_table()];
+    let map = probe(&els);
+    let d = map.get(&els[0].id).expect("decision");
+
+    assert_eq!(d.orientation, Orientation::Landscape);
+    // Decided against the landscape width, not the portrait one.
+    assert_eq!(
+        d.available_pt,
+        template().available_landscape_pt(),
+        "reduction was measured against the wrong width"
+    );
+    // And it fits there at a size above the floor rather than being driven to it.
+    match d.reduction {
+        Reduction::Shrink { size_pt } => assert!(
+            size_pt > template().floors.table_pt,
+            "inherited the portrait floor instead of re-measuring: {size_pt}pt"
+        ),
+        Reduction::None => {}
+        other => panic!("expected to fit in landscape, got {other:?}"),
+    }
+}
+
+/// The fourth rung, reachable for the first time.
+///
+/// `probe.rs` could previously emit only none/shrink/rotate, so `Reduction::Clip` was
+/// unreachable code even though `harvest` parsed it and `render` implemented it. An
+/// element too wide even for landscape at its floor overflowed silently.
+#[test]
+fn an_element_too_wide_even_for_landscape_is_clipped() {
+    let els = vec![Element::new(
+        9,
+        ElementClass::Table,
+        // 40 columns of long values: no font size within the floor fits 308pt.
+        Markup::raw(r#"#table(columns: 40, ..range(40).map(i => [verylongcell#i]))"#),
+    )];
+    let map = probe(&els);
+    let d = map.get(&els[0].id).expect("decision");
+
+    assert_eq!(
+        d.orientation,
+        Orientation::Landscape,
+        "should have tried landscape"
+    );
+    assert_eq!(
+        d.reduction,
+        Reduction::Clip,
+        "the last rung is still unreachable"
+    );
+}
+
+/// Clipping must be visible. Silently losing content is the one outcome worse than an
+/// ugly page.
+#[test]
+fn a_clipped_element_carries_a_visible_marker() {
+    let el = Element::new(
+        0,
+        ElementClass::Table,
+        Markup::raw("#table(columns: 1, [x])"),
+    );
+    let map = DecisionMap {
+        decisions: vec![Decision {
+            id: el.id,
+            orientation: Orientation::Portrait,
+            reduction: Reduction::Clip,
+            natural_pt: 999.0,
+            available_pt: 196.0,
+        }],
+    };
+    let text = Typesetter::new()
+        .render(std::slice::from_ref(&el), &template(), &map)
+        .expect("renders")
+        .text();
+    assert!(
+        text.contains("clipped"),
+        "no marker in the output: {text:?}"
+    );
+}
+
+/// Both axes reach the page: a rotated element lands on a landscape page, and its
+/// reduction is applied there.
+#[test]
+fn rotation_and_reduction_compose_in_the_output() {
+    let el = wide_table();
+    let map = DecisionMap {
+        decisions: vec![Decision {
+            id: el.id,
+            orientation: Orientation::Landscape,
+            reduction: Reduction::Shrink { size_pt: 8.0 },
+            natural_pt: 400.0,
+            available_pt: 296.0,
+        }],
+    };
+    let compilation = Typesetter::new()
+        .render(std::slice::from_ref(&el), &template(), &map)
+        .expect("renders");
+    let landscape = compilation.geometry().iter().any(|p| p.is_landscape());
+    assert!(
+        landscape,
+        "no landscape page produced: {:?}",
+        compilation.geometry()
+    );
 }
