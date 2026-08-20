@@ -128,35 +128,13 @@ impl PathBroker {
 mod tests {
     use super::*;
 
-    /// A directory of our own, removed on drop even if the test panics.
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(tag: &str) -> Self {
-            let unique = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos();
-            let dir = std::env::temp_dir().join(format!("md2pdf-{tag}-{unique}"));
-            fs::create_dir_all(&dir).expect("temp dir");
-            Self(dir)
-        }
-        fn path(&self, name: &str) -> PathBuf {
-            self.0.join(name)
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
+    use crate::testing::TempDir;
 
     #[test]
     fn writes_and_reads_back() {
         let tmp = TempDir::new("rw");
         let broker = PathBroker::new();
-        let file = tmp.path("notes.md");
+        let file = tmp.join("notes.md");
 
         broker.write_new(&file, b"# Title\n").expect("write");
         assert_eq!(broker.read_to_string(&file).expect("read"), "# Title\n");
@@ -168,7 +146,7 @@ mod tests {
         // The product guarantee: output is never silently overwritten.
         let tmp = TempDir::new("norep");
         let broker = PathBroker::new();
-        let file = tmp.path("out.pdf");
+        let file = tmp.join("out.pdf");
 
         broker.write_new(&file, b"first").expect("write");
         let err = broker.write_new(&file, b"second").expect_err("must refuse");
@@ -184,7 +162,7 @@ mod tests {
     fn overwrite_replaces_but_must_be_asked_for_by_name() {
         let tmp = TempDir::new("over");
         let broker = PathBroker::new();
-        let file = tmp.path("out.pdf");
+        let file = tmp.join("out.pdf");
 
         broker.write_new(&file, b"first").expect("write");
         broker.overwrite(&file, b"second").expect("overwrite");
@@ -197,7 +175,7 @@ mod tests {
         // exist yet is ordinary.
         let tmp = TempDir::new("parents");
         let broker = PathBroker::new();
-        let nested = tmp.path("sub/deeper/out.pdf");
+        let nested = tmp.join("sub/deeper/out.pdf");
 
         broker.write_new(&nested, b"pdf").expect("write");
         assert!(broker.exists(&nested));
@@ -207,7 +185,7 @@ mod tests {
     fn a_missing_file_reports_which_file() {
         let tmp = TempDir::new("missing");
         let broker = PathBroker::new();
-        let file = tmp.path("nope.md");
+        let file = tmp.join("nope.md");
 
         let err = broker.read_to_string(&file).expect_err("must fail");
         assert!(
@@ -220,7 +198,7 @@ mod tests {
     fn invalid_utf8_is_refused_rather_than_mangled() {
         let tmp = TempDir::new("utf8");
         let broker = PathBroker::new();
-        let file = tmp.path("latin1.md");
+        let file = tmp.join("latin1.md");
 
         // 0xFF is not valid UTF-8 in any position.
         broker
@@ -237,7 +215,7 @@ mod tests {
         // `exists` answers "can I read this as a file?", not "is there something here?"
         let tmp = TempDir::new("dir");
         let broker = PathBroker::new();
-        let dir = tmp.path("diagram.png");
+        let dir = tmp.join("diagram.png");
         fs::create_dir_all(&dir).expect("dir");
 
         assert!(!broker.exists(&dir), "a directory was reported as a file");

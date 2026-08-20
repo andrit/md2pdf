@@ -323,7 +323,7 @@ an empty box to tick.
 |---|---|---|
 | ✅ **T15** | `md2pdf-paths`: `PathBroker` + `PathError` | read/write/exists; the first real `std::fs` in the tree |
 | ✅ **T16** | `contract.rs`: `Command`/`Event` | plain data, serde round-trippable; failure travels as an Event (`INV-8`) |
-| **T17** | `job.rs` + `BrokerImages` + `mirror::output_path` + `paths::testing` | one Source, disk to disk, with its tests |
+| ✅ **T17** | `job.rs` + `BrokerImages` + `mirror::output_path` + `paths::testing` | one Source, disk to disk, with its tests |
 | ~~T18~~ | *merged into T17 — tests ship with the code, not after it* | — |
 
 ## Tests
@@ -341,9 +341,13 @@ clean up after themselves. A temp directory per test, created and removed by the
 - Round-trip `Command` and `Event` through JSON — the property that makes an out-of-process adapter
   possible later.
 
-## Exit criteria
+## Exit criteria — all met 2026-08-20
 
-1. `notes.md` on disk becomes `notes.pdf` on disk, with an embedded image, driven by a `Command`.
-2. Nothing is ever silently overwritten.
-3. `verify.sh` green — including the boundary check, now that `std::fs` genuinely exists.
-4. `/phase-audit` run, or explicitly waived as in 3a/3b/3b2.
+1. ✅ `notes.md` on disk becomes `notes.pdf` on disk, with an embedded image, driven by a `Command`
+2. ✅ nothing is ever silently overwritten — pinned by a test that checks the original bytes survive
+3. ✅ `verify.sh` green, including the boundary check now that `std::fs` genuinely exists
+4. ⚠️ `/phase-audit` not run — unavailable in this environment, as in 3a/3b/3b2
+
+**No visual check this time, deliberately.** Rendering did not change: the same convert→typeset path
+was confirmed by eye in T12 and T13, and what 3c1 added is file reading and path arithmetic, which
+the tests assert exactly. Looking again would be ritual rather than evidence.

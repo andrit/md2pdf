@@ -12,8 +12,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 fail=0
 
+# Drop matches that are comments rather than code.
+#
+# `grep -rn` emits `path:line:content`, so this strips lines whose content begins with
+# `//`, `//!` or `*`. Both source greps below have now fired on their own explanatory
+# prose — once on a Cargo.toml comment, once on a doc comment describing the very rule
+# being enforced. A guard that cannot tell code from a sentence about code trains people
+# to reword comments, which is exactly the wrong lesson.
+#
+# Conservative on purpose: a trailing comment on a real code line is still reported.
+# Over-reporting is a nuisance; under-reporting would defeat the guard.
+# `|| true` is repeated at each call site: `pipefail` propagates a no-match exit from
+# any stage, so catching it only inside the function is not enough.
+strip_comments() { grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*)' || true; }
+
 leaks=$(grep -rn --include='*.rs' -E '\buse +typst(_[a-z]+)?::|\btypst(_[a-z]+)?::' crates \
-        | grep -v '^crates/md2pdf-typeset/' || true)
+        | grep -v '^crates/md2pdf-typeset/' | strip_comments || true)
 if [ -n "$leaks" ]; then
   echo "FAIL: typst referenced outside md2pdf-typeset (the anti-corruption layer):"
   echo "$leaks" | sed 's/^/  /'
@@ -33,7 +47,7 @@ if [ -n "$manifests" ]; then
 fi
 
 fs=$(grep -rn --include='*.rs' -E '\bstd::fs\b|\bFile::(open|create)\b' crates \
-     | grep -v '^crates/md2pdf-paths/' || true)
+     | grep -v '^crates/md2pdf-paths/' | strip_comments || true)
 if [ -n "$fs" ]; then
   echo "FAIL: filesystem access outside md2pdf-paths (PathBroker):"
   echo "$fs" | sed 's/^/  /'

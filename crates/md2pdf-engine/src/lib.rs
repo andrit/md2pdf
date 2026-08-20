@@ -20,3 +20,4 @@ pub mod output;
 pub mod review;
 
 pub use contract::{Command, Emit, Event};
+pub use job::{handle, Deps, JobError};

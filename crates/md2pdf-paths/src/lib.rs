@@ -15,5 +15,8 @@ pub mod mirror;
 pub mod settings;
 // SourceSet discovery; records the SourceRoot
 pub mod walk;
+// temp-dir helper other crates borrow, so std::fs stays in this crate
+pub mod testing;
 
 pub use broker::{PathBroker, PathError};
+pub use mirror::output_path;
