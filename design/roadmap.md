@@ -2,7 +2,10 @@
 
 **Written:** 2026-08-18 · **Status:** living document, amend rather than replace.
 
-> **The target model is `design/invariants.md`.** This document is the *sequence*; that one is what
+> **The target model is `design/invariants.md`**; the record of *why* each commit happened is
+> `design/commit-log.md`.
+>
+> **`design/invariants.md`** This document is the *sequence*; that one is what
 > must be true when we are done. Decisions cite an invariant, or say "no invariant — simple thing".
 
 ## Why this exists
