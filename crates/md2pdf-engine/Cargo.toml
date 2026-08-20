@@ -11,3 +11,8 @@ md2pdf-typeset = { path = "../md2pdf-typeset" }
 md2pdf-paths = { path = "../md2pdf-paths" }
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+# The contract is "plain serializable data", not "JSON" — the adapter picks the wire
+# format. serde_json is here only to prove the types round-trip (INV-8).
+[dev-dependencies]
+serde_json = { workspace = true }

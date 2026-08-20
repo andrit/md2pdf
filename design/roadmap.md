@@ -60,8 +60,8 @@ Detail lives in the phase plans; this is the index.
 | T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ `447182a` |
 | T14 | Finish the ladder — two axes, landscape re-measure, `clip` reachable | 3b2 | ✅ `e7db9e2` |
 | T15 | `PathBroker` — the first real `std::fs` in the tree | 3c1 | ✅ staged |
-| T16 | `contract.rs` — minimal `Command`/`Event` | 3c1 | ☐ next |
-| T17 | `job.rs` — the sequence, plus the `ImageProbe` adapter | 3c1 | ☐ |
+| T16 | `contract.rs` — minimal `Command`/`Event` | 3c1 | ✅ staged |
+| T17 | `job.rs` — the sequence, plus the `ImageProbe` adapter | 3c1 | ☐ next |
 | T18 | End-to-end tests over a temp directory | 3c1 | ☐ |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the

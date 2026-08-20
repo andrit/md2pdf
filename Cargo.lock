@@ -1191,6 +1191,7 @@ dependencies = [
  "md2pdf-paths",
  "md2pdf-typeset",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
