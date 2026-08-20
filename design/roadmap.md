@@ -66,8 +66,8 @@ Detail lives in the phase plans; this is the index.
 | T16 | `contract.rs` — minimal `Command`/`Event` | 3c1 | ✅ staged |
 | T17 | `job.rs` + `BrokerImages` + `output_path`; tests included | 3c1 | ✅ staged |
 | ~~T18~~ | *merged into T17 — tests ship with the code* | 3c1 | — |
-| T19 | `walk` + `mirror` with a real SourceRoot | 3c2 | ☐ next |
-| T20 | Collisions: detection, `Resolution`, `Diagnostic::seal` | 3c2 | ☐ |
+| T19 | `walk` + `mirror` with a real SourceRoot | 3c2 | ✅ staged |
+| T20 | Collisions: detection, `Resolution`, `Diagnostic::seal` | 3c2 | ☐ next |
 | T21 | Batch `Command`/`Event` + orchestration | 3c2 | ☐ |
 | T22 | Guard G3 — determinism + golden-hash tests | guards | ✅ staged |
 | T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ☐ |

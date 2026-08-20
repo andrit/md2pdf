@@ -20,3 +20,4 @@ pub mod testing;
 
 pub use broker::{PathBroker, PathError};
 pub use mirror::output_path;
+pub use walk::SourceSet;

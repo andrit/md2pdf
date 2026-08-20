@@ -140,3 +140,25 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   **Verified before building:** determinism holds across **separate processes**, not just within
   one — three runs, identical hash. The earlier in-process check would not have caught per-process
   nondeterminism, which is exactly what a stored golden hash is exposed to.
+
+## Phase 3c2 — batch
+
+- `<pending>` **feat(paths): walk a SourceSet, recording its SourceRoot** (T19).
+
+  > `walk` collects `.md` and `.markdown` recursively, case-insensitively, and records the
+  > SourceRoot on the `SourceSet` so `mirror::output_path` has one source of truth for where
+  > output lands.
+  >
+  > Four rules chosen to be predictable rather than clever: hidden entries are skipped so `.git`
+  > is never descended; **symlinks are not followed**, because a link to an ancestor would hang the
+  > walk and a hang reports nothing; order is sorted, because filesystem order would make batch
+  > output vary between runs on identical input; and an unreadable directory **fails** the walk
+  > rather than being skipped, since converting fewer files than the user has is the failure that
+  > looks like success.
+  >
+  > `SourceSet` lives in `md2pdf-paths`, not the domain — same reasoning as `ImageManifest` in
+  > convert: nothing below this crate needs the type. Exposed as `PathBroker::walk` so filesystem
+  > access keeps going through the one door a future sandbox must be fitted to, while `walk.rs`
+  > keeps the policy.
+  >
+  > `mirror::output_path` needed no work: T17 built it taking the SourceRoot already.

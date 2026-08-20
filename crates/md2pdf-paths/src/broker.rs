@@ -94,6 +94,16 @@ impl PathBroker {
         self.write_inner(path, bytes)
     }
 
+    /// Walk a directory into a [`SourceSet`](crate::walk::SourceSet).
+    ///
+    /// Delegates to `walk`, which holds the rules; routed through the broker because
+    /// this is filesystem access and the broker is the door a future sandbox has to be
+    /// fitted to. Splitting the *policy* (what counts as a Source) from the *access*
+    /// keeps each module doing one thing.
+    pub fn walk(&self, root: &Path) -> Result<crate::walk::SourceSet, PathError> {
+        crate::walk::walk(root)
+    }
+
     /// True only for a file that exists and is actually a file.
     ///
     /// A directory named `diagram.png` exists and cannot be read as an image, so
