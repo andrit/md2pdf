@@ -230,8 +230,12 @@ existence check arrives **as a parameter**, per CLAUDE.md's dependency-as-parame
 pub trait ImageProbe { fn exists(&self, path: &Path) -> bool; }
 ```
 
-A `HashMap`-backed stub makes every image case testable with no filesystem. The real implementation
-lives in `md2pdf-paths` and is injected by the engine.
+A `HashMap`-backed stub makes every image case testable with no filesystem.
+
+> **Corrected by 3c1 (E1), 2026-08-20:** the real implementation cannot live in `md2pdf-paths` —
+> `ImageProbe` is defined in `md2pdf-convert`, and paths depends only on `md2pdf-domain`, so it
+> cannot see the trait. The adapter lives in the **engine**, which already depends on both and is
+> the composition root. See `design/plan-engine.md`.
 
 Three outcomes, mirroring the three domain events (`ImageResolved`, `ImageMissing`,
 `RemoteImageSkipped`):

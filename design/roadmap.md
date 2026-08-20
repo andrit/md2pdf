@@ -55,7 +55,11 @@ Detail lives in the phase plans; this is the index.
 | T11 | `images.rs` — resolution, probe, virtual naming | 3b | ✅ `f6da45d` |
 | T12 | Wire through: `SourceContext`, `ImageManifest` | 3b | ✅ `ba34fec` |
 | T13 | Ladder on real images — `Rung::Scale`, image floor, `reflow` | 3b | ✅ `447182a` |
-| T14 | Finish the ladder — two axes, landscape re-measure, `clip` reachable | 3b2 | ✅ staged |
+| T14 | Finish the ladder — two axes, landscape re-measure, `clip` reachable | 3b2 | ✅ `e7db9e2` |
+| T15 | `PathBroker` — the first real `std::fs` in the tree | 3c1 | ☐ next |
+| T16 | `contract.rs` — minimal `Command`/`Event` | 3c1 | ☐ |
+| T17 | `job.rs` — the sequence, plus the `ImageProbe` adapter | 3c1 | ☐ |
+| T18 | End-to-end tests over a temp directory | 3c1 | ☐ |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.
@@ -72,7 +76,7 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | **3a** | **Conversion, Stage 1 — text** | **✅ code-complete 2026-08-18 (T5–T8); `/phase-audit` not yet run** | `/phase-audit` + `verify.sh` |
 | 3b | Images, Stage 2 | ✅ code-complete 2026-08-19 (T10–T13); `/phase-audit` not run | `/phase-audit` |
 | 3b2 | Finish the escalation ladder — all atomic classes | ✅ code-complete 2026-08-20 (T14); `/phase-audit` not run | `/phase-audit` |
-| 3c1 | Engine — **walking skeleton**: one file, disk to disk | planned | `/phase-audit` |
+| **3c1** | **Engine — walking skeleton**: one file, disk to disk | **◐ current — planned in `plan-engine.md` (T15–T18)** | `/phase-audit` |
 | 3c2 | Paths + Output — widen to batch, collisions | planned | `/phase-audit` |
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
 | 3e | Template catalogue + shipped template | planned | `/phase-audit` |
@@ -174,7 +178,7 @@ cost of finding them late is highest, because three bounded contexts land at onc
 So 3c is **explicitly split**, narrow end first. This is the plan, not a prediction that it might
 split.
 
-### 3c1 — the walking skeleton
+### 3c1 — the walking skeleton *(planned in `design/plan-engine.md`)*
 
 **One file, in and out, through every layer.** No batch, no collisions, no template discovery, no
 overrides.
