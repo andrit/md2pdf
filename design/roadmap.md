@@ -3,7 +3,7 @@
 **Written:** 2026-08-18 · **Status:** living document, amend rather than replace.
 
 > **The target model is `design/invariants.md`**; the record of *why* each commit happened is
-> `design/commit-log.md`.
+> `design/commit-log.md`. Proposals not yet scheduled live in `design/feature-design/`.
 >
 > **`design/invariants.md`** This document is the *sequence*; that one is what
 > must be true when we are done. Decisions cite an invariant, or say "no invariant — simple thing".
@@ -66,6 +66,12 @@ Detail lives in the phase plans; this is the index.
 | T16 | `contract.rs` — minimal `Command`/`Event` | 3c1 | ✅ staged |
 | T17 | `job.rs` + `BrokerImages` + `output_path`; tests included | 3c1 | ✅ staged |
 | ~~T18~~ | *merged into T17 — tests ship with the code* | 3c1 | — |
+| T19 | `walk` + `mirror` with a real SourceRoot | 3c2 | ☐ next |
+| T20 | Collisions: detection, `Resolution`, `Diagnostic::seal` | 3c2 | ☐ |
+| T21 | Batch `Command`/`Event` + orchestration | 3c2 | ☐ |
+| T22 | Guard G3 — determinism + golden-hash tests | guards | ☐ |
+| T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ☐ |
+| T24 | Guard G2 — no UI deps *(gated on adapter location)* | guards | ☐ |
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.
@@ -83,7 +89,7 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 3b | Images, Stage 2 | ✅ code-complete 2026-08-19 (T10–T13); `/phase-audit` not run | `/phase-audit` |
 | 3b2 | Finish the escalation ladder — all atomic classes | ✅ code-complete 2026-08-20 (T14); `/phase-audit` not run | `/phase-audit` |
 | 3c1 | Engine — walking skeleton: one file, disk to disk | ✅ code-complete 2026-08-20 (T15–T17); `/phase-audit` not run | `/phase-audit` |
-| **3c2** | **Paths + Output — widen to batch, collisions** | **◐ next** | `/phase-audit` |
+| **3c2** | **Paths + Output — widen to batch, collisions** | **◐ next — planned in `plan-batch.md` (T19–T21)** | `/phase-audit` |
 
 | 3d | CLI adapter, end to end | planned | `/phase-audit` |
 | 3e | Template catalogue + shipped template | planned | `/phase-audit` |
@@ -199,7 +205,7 @@ attention list. Each is a real requirement and each is a *widening* of a path th
 **Exit:** `notes.md` on disk becomes `notes.pdf` on disk, with a real image in it, exercised by an
 engine-level test. The first time the whole stack runs end to end.
 
-### 3c2 — widen to batch
+### 3c2 — widen to batch *(planned in `design/plan-batch.md`)*
 
 - **`md2pdf-paths`** — `walk` (SourceSet discovery, records the SourceRoot), `mirror`
   (OutputPath = Destination + Source relative to SourceRoot). Batch output **mirrors the source
