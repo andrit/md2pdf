@@ -4,6 +4,10 @@
 reasoning, not the diff. `git log` already holds the what; this holds the why in one readable
 place, so a decision can be found without archaeology through twenty commit messages.
 
+**Write the entry when staging, not after committing**, so it ships inside the commit it describes.
+Missed on the first three commits after this file was created; those entries landed a commit late
+and are marked as such.
+
 Newest last. Docs-only and plan commits are listed by subject alone; code commits carry their body.
 
 ---
@@ -105,3 +109,34 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > allowed to call it, and dedupes the copy that was in broker's tests.
   >
   > Also fixes `check-boundaries.sh` to ignore comments.
+
+## Housekeeping and planning
+
+- `43c2194` docs: add `commit-log.md` — the record of why, per commit
+- `944caa8` docs: plan 3c2 (batch); sequence the boundary guards as T22–T24.
+  3c2's shape turns on INV-12: because output mirrors the source tree, Source→OutputPath is
+  injective, so two Sources in a batch can never collide with each other and **every** Collision is
+  knowable before any conversion begins. Pre-flight detection is therefore complete rather than
+  merely convenient, and the event stream stays one-way.
+
+## Guards track
+
+- `ad90e38` **feat: guard determinism in the pure core; golden-hash tests** (T22, G3).
+  *(entry written one commit late — the convention above was not yet being followed)*
+
+  > `check-boundaries.sh` gains a third rule: no `SystemTime`, `Instant`, `std::env`, or `rand` in
+  > domain/convert/typeset (INV-7). `md2pdf-paths` is deliberately exempt — `testing::TempDir` uses
+  > the clock for unique directory names, which never reaches output.
+  >
+  > Cashes the property in immediately: six golden tests pin the `fnv1a` hash and length of whole
+  > PDFs across prose, structure, code, escaping, degraded images and the escalation ladder. `fnv1a`
+  > rather than a cryptographic hash — this detects change, it does not resist an adversary — so no
+  > dependency is added.
+  >
+  > Every other test asserts something specific. These assert that *nothing* changed, which is the
+  > only way to catch a change nobody thought to look for — how the italic bug survived five green
+  > commits.
+
+  **Verified before building:** determinism holds across **separate processes**, not just within
+  one — three runs, identical hash. The earlier in-process check would not have caught per-process
+  nondeterminism, which is exactly what a stored golden hash is exposed to.
