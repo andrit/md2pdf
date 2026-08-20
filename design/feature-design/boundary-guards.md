@@ -132,15 +132,14 @@ in `lib.rs` than by a script.
 
 Recorded because a plan without them is a sales pitch.
 
-**D1 · Grep is the wrong tool for Rust semantics, and a proper one exists.**
-`cargo-deny` has a `bans` section designed for exactly G1, G2 and G5, and it understands the
-dependency graph rather than pattern-matching text. Hand-rolling greps means reimplementing a
-solved problem slightly worse.
+**D1 · ~~Grep is the wrong tool; `cargo-deny` exists~~ — RESOLVED 2026-08-20, doubt yields.**
+The reasoning was sound: `cargo-deny`'s `bans` section is built for exactly G1/G2/G5 and understands
+the dependency graph instead of pattern-matching text.
 
-*Why hand-rolled anyway:* it needs no install, works offline, runs in `verify.sh` with everything
-else, and the project deliberately prizes reproducible offline builds. But this is a real trade,
-not an obvious win, and if `cargo-deny` is ever added for another reason, G1/G2/G5 should move into
-it rather than sit alongside it.
+**Checked: it is not installed**, and adding a `cargo install` step to `verify.sh` breaks CLAUDE.md's
+rule that *CI runs the same command you run locally* — a gate that only works after a network fetch
+is not a gate that works everywhere. Hand-rolled greps are therefore the correct choice here, not
+merely a defensible one. If `cargo-deny` is ever adopted for another reason, move G1 into it then.
 
 **D2 · Both existing guards have fired on their own prose. Twice.**
 Once on a Cargo.toml comment containing the word "typst", once on a doc comment explaining the
@@ -214,7 +213,7 @@ prose (D2):
    known to work;
 3. a one-line entry in `check-boundaries.sh`'s header naming the invariant it enforces.
 
-### T22 · G3 — determinism, and the golden-hash tests it unlocks
+### ✅ T22 · G3 — determinism, and the golden-hash tests it unlocks *(built 2026-08-20)*
 
 **First, because it is the only guard that enables something.** Determinism was verified to hold
 already (byte-identical PDFs 1.1 seconds apart), so this protects a live property and cashes it in
@@ -234,10 +233,26 @@ deliberately. A hash that gets refreshed reflexively whenever it goes red is wor
 because it looks like coverage. The failure message must say *"if this change was intended, update
 the hash and say why in the commit"* — the test's own instructions are the mitigation.
 
-**Second doubt:** the hash pins the *whole* PDF, so an innocuous Typst upgrade turns every golden
-test red at once. That is arguably correct — a Typst upgrade **should** be a deliberate, reviewed
-event, and `docs/typst-upgrade.md` already treats it as a scheduled task. Noted so the noise is
-expected rather than alarming.
+**Second doubt — largely yields.** The hash pins the whole PDF, so a Typst upgrade turns every
+golden test red at once. With a handful of fixtures that is a handful of lines to update, and a
+Typst upgrade is already a scheduled, reviewed task with its own runbook (`docs/typst-upgrade.md`) —
+so red golden tests are the *correct* signal, not noise. Keep the fixture count small enough that
+this stays true.
+
+**Third doubt — RESOLVED 2026-08-20, and it was the one that mattered.** The determinism check on
+2026-08-20 ran twice *in a single process*, which is not what a golden test does: a stored hash is
+compared against a value produced by a **different run**, so any per-process nondeterminism (hash
+seeds, allocator addresses leaking into output) would have passed that check and failed as a golden
+test — after the work was done.
+
+**Checked properly: three separate processes produced the identical hash** (`03a3cda8db8f9ce4`,
+17,644 bytes) over a document with a heading, emphasis, bold, an embedded image and a table. Golden
+hashes are viable.
+
+Two useful side-findings: `md2pdf_domain::fnv1a` is sufficient as the digest — this is change
+detection, not tamper resistance, the same reasoning as `ElementId` — so **G3 needs no new
+dependency**; and the pure core currently contains **no** `SystemTime`, `Instant`, `rand` or
+`std::env` at all, so the guard starts from a true state.
 
 ### T23 · G1 — no network
 

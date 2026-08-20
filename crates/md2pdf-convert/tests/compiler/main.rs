@@ -8,4 +8,5 @@
 mod api;
 mod emission;
 mod escaping;
+mod golden;
 mod images;

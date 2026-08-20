@@ -69,9 +69,15 @@ Detail lives in the phase plans; this is the index.
 | T19 | `walk` + `mirror` with a real SourceRoot | 3c2 | ☐ next |
 | T20 | Collisions: detection, `Resolution`, `Diagnostic::seal` | 3c2 | ☐ |
 | T21 | Batch `Command`/`Event` + orchestration | 3c2 | ☐ |
-| T22 | Guard G3 — determinism + golden-hash tests | guards | ☐ |
+| T22 | Guard G3 — determinism + golden-hash tests | guards | ✅ staged |
 | T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ☐ |
 | T24 | Guard G2 — no UI deps *(gated on adapter location)* | guards | ☐ |
+
+**The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
+holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a
+phase that changes orchestration and output paths but must not change rendering at all. A golden
+hash going red during 3c2 is an unambiguous signal that something untouched broke. Built afterwards
+it would only protect work already finished.
 
 Tasks beyond 3b are not numbered yet — they are named when their phase is planned, so the
 numbering reflects decisions actually made rather than a guess at future shape.

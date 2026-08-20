@@ -2,8 +2,9 @@
 # Enforces the two isolation boundaries that clippy cannot express, because clippy
 # has no way to say "this lint applies everywhere EXCEPT this crate".
 #
-#   md2pdf-typeset  is the only crate that may link the typst crate
-#   md2pdf-paths    is the only crate that may touch the filesystem
+#   md2pdf-typeset  is the only crate that may link the typst crate      (INV-10)
+#   md2pdf-paths    is the only crate that may touch the filesystem       (INV-9)
+#   the pure core   must contain nothing nondeterministic                 (INV-7)
 #
 # The dependency graph already makes the first one impossible to violate by accident
 # (typst is not in the other manifests). This catches the second, and catches someone
@@ -54,5 +55,21 @@ if [ -n "$fs" ]; then
   fail=1
 fi
 
-[ $fail -eq 0 ] && echo "boundaries OK: typst confined to md2pdf-typeset, fs confined to md2pdf-paths"
+# INV-7: identical output on every platform, which is only testable if the pure core
+# is deterministic. Verified 2026-08-20: three separate processes produced byte-identical
+# PDFs, which is what makes the golden-hash tests in md2pdf-convert possible. One
+# `SystemTime::now()` in a PDF timestamp would silently end that.
+#
+# md2pdf-paths is deliberately NOT listed: `testing::TempDir` uses the clock for unique
+# directory names, which is test scaffolding and never reaches output.
+nondet=$(grep -rn --include='*.rs' -E '\b(SystemTime|Instant|std::env|rand::|thread_rng)\b' \
+         crates/md2pdf-domain crates/md2pdf-convert crates/md2pdf-typeset \
+         | strip_comments || true)
+if [ -n "$nondet" ]; then
+  echo "FAIL: nondeterminism in the pure core (breaks reproducible output, INV-7):"
+  echo "$nondet" | sed 's/^/  /'
+  fail=1
+fi
+
+[ $fail -eq 0 ] && echo "boundaries OK: typst confined, fs confined, pure core deterministic"
 exit $fail
