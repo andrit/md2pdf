@@ -18,6 +18,7 @@ pub mod job;
 pub mod markup;
 pub mod template;
 
+pub use collision::{BlanketResolution, Collision, Resolution};
 pub use decision::{Decision, DecisionMap, Orientation, Reduction};
 pub use diagnostic::{Compromise, CompromiseKind, Diagnostic};
 pub use element::{Element, ElementClass, ElementId};

@@ -7,3 +7,8 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+
+# Only to prove the wire-crossing types round-trip; the domain names them, adapters
+# choose the format.
+[dev-dependencies]
+serde_json = { workspace = true }

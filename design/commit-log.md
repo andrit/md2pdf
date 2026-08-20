@@ -162,3 +162,29 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > keeps the policy.
   >
   > `mirror::output_path` needed no work: T17 built it taking the SourceRoot already.
+
+- `<pending>` **feat: pre-flight collision planning; seal the Diagnostic** (T20).
+
+  > Collisions are resolved **before any Source is converted**. That is possible because of
+  > INV-12: output mirrors the source tree, so Source→OutputPath is injective and every Collision
+  > is with something already on disk. The event stream stays one-way (INV-8) and nothing pauses
+  > mid-batch waiting for an answer an out-of-process adapter could not give.
+  >
+  > **Found while building:** mirroring does not make *renamed* outputs unique. `a.md` colliding
+  > with an existing `a.pdf` renames to `a-1.pdf` — exactly what a sibling `a-1.md` was about to
+  > write. The planner therefore tracks the paths the batch has already claimed, not just what is
+  > on disk. Without it two planned writes target one path and one silently destroys the other;
+  > pinned by a test and confirmed by removing the check.
+  >
+  > `Collision`, `Resolution` and `BlanketResolution` live in the domain — unlike `SourceSet` and
+  > `ImageManifest` — because they cross the Command boundary and an adapter must be able to
+  > construct one.
+  >
+  > `Diagnostic::seal` closes the §4 seam: convert-time Compromises had no route into a Diagnostic
+  > at all, so INV-4 held in the code and broke at the join. Sealed output is ordered by element,
+  > because the user cares where in their document a concession happened, not which pass made it.
+  >
+  > Also serialises `verify.sh`'s test step (`-j 1`). Linking two typst-laden test binaries at once
+  > exhausts memory on a 4 GB machine; it has bitten three times and gets likelier with every crate
+  > that gains an integration test. Clippy has already compiled the graph, so the step is mostly
+  > linking and serialising it costs little.
