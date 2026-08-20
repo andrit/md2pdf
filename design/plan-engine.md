@@ -137,12 +137,106 @@ Command::ConvertSource
 path, so sharing across a batch is correct and desirable, and clearing per Source would discard the
 `comemo` hit the long-lived `World` exists to keep.
 
+## T16 in detail — the contract *(planned 2026-08-20, revised same day)*
+
+Decisions cite `design/invariants.md` rather than re-deriving the finished product. Where no
+invariant applies, the rule is: **build the simple thing.**
+
+### C1 · Events go to a plain closure sink — *revised*
+
+> **Superseded 2026-08-20.** The first version specified an `EventSink` trait, justified as
+> "keeps closures out of the contract types". That reason does not hold — the sink is not a
+> contract type either way — and the decision fails the gate test: swapping a sink type later is a
+> mechanical refactor the compiler finds for you. Cheap now *and* cheap later means **build the
+> simple thing.** Recorded rather than quietly deleted, because it is a clean example of the
+> failure mode `invariants.md` exists to prevent.
+
+```rust
+pub fn handle(command: Command, deps: &Deps, emit: &mut dyn FnMut(Event));
+```
+
+An adapter passes `|e| tx.send(e)`; a test passes `|e| collected.push(e)`. Nothing to implement.
+
+### C2 · Failure is an **Event** — `INV-8`
+
+An adapter may run out-of-process, so it sees the event stream and nothing else. A failure reported
+only through a `Result` is invisible across the exact boundary the contract exists to support.
+
+`handle` therefore returns **nothing**. Every outcome — success, compilation failure, unreadable
+source, refused overwrite — is emitted. `job.rs` uses `Result` internally, and `handle` converts at
+the edge.
+
+> The earlier draft called the return value "a convenience for in-process callers", which would
+> have re-created the two-channel ambiguity this decision exists to remove. One channel.
+
+### C3 · Events carry the Compromises — `INV-4`
+
+Information not emitted cannot be recovered later. `Compromise` derives `Serialize`, and the whole
+domain was **verified to round-trip through JSON** before this was committed to — all seven
+`CompromiseKind` variants and all four `Reduction` variants, including the internally tagged ones.
+
+Honest limit: an adapter currently receives `{order, content_hash}` and `page: null`, which it
+cannot yet render as "table on p.4". Carrying them is about not destroying information, not about
+present usefulness.
+
+### C4 · The engine names the types; the adapter picks the wire format
+
+`md2pdf-engine` depends on `serde` but **not** `serde_json` — the CLI holds that. The contract is
+"plain serializable data", not "JSON". `serde_json` is a dev-dependency here, for the round-trip
+test only.
+
+### C5 · One conversion event, not two — *new*
+
+The draft had `SourceParsed { elements }` and `MarkupEmitted { images }`, taken from the event
+storm. **The API cannot honestly emit both.** `convert()` parses and emits atomically; the engine
+only ever sees a finished `Conversion`, so two events would claim a granularity that does not exist
+and carry timestamps that are fiction.
+
+One event, reporting what actually happened at the only moment the engine can observe:
+
+```rust
+Event::SourceConverted { elements: usize, images: usize, compromises: Vec<Compromise> }
+```
+
+The event storm describes the **domain**, not the API surface. Where they disagree, the API tells
+the truth about what it can observe.
+
+### The contract
+
+```rust
+pub enum Command {
+    ConvertSource { source: PathBuf, destination: PathBuf },
+}
+
+pub enum Event {
+    SourceConverted { elements: usize, images: usize, compromises: Vec<Compromise> },
+    CompilationSucceeded { pages: usize },
+    CompilationFailed { message: String },
+    OutputWritten { path: PathBuf },
+    Failed { message: String },
+}
+```
+
+Internally tagged, snake_case: `{"event":"output_written","path":"…"}`.
+
+### Not decided — no invariant applies
+
+`#[non_exhaustive]`, template selection in `Command`, correlation/job ids. All three are listed in
+the gate test's "build the simple thing" column.
+
+### Tests
+
+- Every variant survives a JSON round-trip (`INV-8` — the property that makes an out-of-process
+  adapter possible, and the one that rots silently when a field is added carelessly).
+- Serialised tag names asserted explicitly, so a rename is a deliberate wire-format change.
+- A closure sink collects events in order.
+
 ## Work breakdown
 
 | | Task | Deliverable |
 |---|---|---|
 | ✅ **T15** | `md2pdf-paths`: `PathBroker` + `PathError` | read/write/exists; the first real `std::fs` in the tree |
-| **T16** | `contract.rs`: minimal `Command`/`Event` | plain data, serde round-trippable |
+| ✅ **T16** | `contract.rs`: `Command`/`Event` | plain data, serde round-trippable; failure travels as an Event (`INV-8`) |
 | **T17** | `job.rs`: the sequence above + `BrokerImages` | one Source, disk to disk |
 | **T18** | End-to-end tests over a temp directory | the first tests that touch a real filesystem |
 

@@ -2,6 +2,9 @@
 
 **Written:** 2026-08-18 · **Status:** living document, amend rather than replace.
 
+> **The target model is `design/invariants.md`.** This document is the *sequence*; that one is what
+> must be true when we are done. Decisions cite an invariant, or say "no invariant — simple thing".
+
 ## Why this exists
 
 Work has been planned one task at a time, which is fine for a task and bad for a project: it hides
