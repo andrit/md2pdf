@@ -141,7 +141,7 @@ path, so sharing across a batch is correct and desirable, and clearing per Sourc
 
 | | Task | Deliverable |
 |---|---|---|
-| **T15** | `md2pdf-paths`: `PathBroker` + `PathError` | read/write/exists; the first real `std::fs` in the tree |
+| ✅ **T15** | `md2pdf-paths`: `PathBroker` + `PathError` | read/write/exists; the first real `std::fs` in the tree |
 | **T16** | `contract.rs`: minimal `Command`/`Event` | plain data, serde round-trippable |
 | **T17** | `job.rs`: the sequence above + `BrokerImages` | one Source, disk to disk |
 | **T18** | End-to-end tests over a temp directory | the first tests that touch a real filesystem |

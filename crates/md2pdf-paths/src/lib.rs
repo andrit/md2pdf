@@ -15,3 +15,5 @@ pub mod mirror;
 pub mod settings;
 // SourceSet discovery; records the SourceRoot
 pub mod walk;
+
+pub use broker::{PathBroker, PathError};
