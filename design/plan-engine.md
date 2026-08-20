@@ -231,14 +231,100 @@ the gate test's "build the simple thing" column.
 - Serialised tag names asserted explicitly, so a rename is a deliberate wire-format change.
 - A closure sink collects events in order.
 
+## T17 in detail — the Job *(planned 2026-08-20)*
+
+The sequence is settled above; E1/E2/E3 decided the hard parts. Four things remain, and one of them
+would have stopped the build.
+
+### J1 · The engine's tests cannot use `std::fs` — `INV-9`
+
+`scripts/check-boundaries.sh` greps **every** `.rs` under `crates/` except `md2pdf-paths`, test
+files included. The engine's tests need temp directories, so the obvious `std::fs::create_dir_all`
+helper would fail the boundary gate immediately.
+
+Three bad answers and one good one:
+
+- Relax the script to exempt `tests/` — weakens a guard that has already caught a real leak.
+- Add `remove_dir_all` to `PathBroker` — product API invented to serve tests; the app never deletes.
+- Leave temp directories behind — no.
+- **Move the helper into `md2pdf-paths` as `pub mod testing`.** Every `std::fs` call stays inside the
+  one crate allowed to make them, and the engine's tests borrow it.
+
+*Chosen: the last.* `md2pdf_paths::testing::TempDir` — creates a uniquely-named directory, removes
+it on drop even if the test panics. The copy currently living in `broker.rs`'s tests moves there, so
+there is one implementation rather than two.
+
+This **strengthens** INV-9: the invariant survives contact with the first crate that genuinely needs
+files, instead of being the first thing bent.
+
+### J2 · `OutputPath` is computed in `md2pdf-paths`, not the engine — `INV-9`, `INV-12`
+
+Even in the degenerate single-file case, deciding *where output goes* is path arithmetic and belongs
+with the crate that owns paths — `mirror.rs` exists for exactly this and currently holds one line of
+doc comment.
+
+```rust
+pub fn output_path(destination: &Path, source: &Path, source_root: Option<&Path>) -> PathBuf
+```
+
+3c1 passes `None`: the output is `destination/<source stem>.pdf`. 3c2 passes the SourceRoot and the
+same function mirrors the tree (`INV-12`). Writing it in the engine now would mean moving it later
+*and* putting path logic outside `md2pdf-paths` in the meantime.
+
+### J3 · `handle` does not call `clear_files` — deliberately
+
+The Typesetter is long-lived so `comemo` memoisation survives between compilations, and the file map
+must be cleared **per Job, not per Source** (T12's finding — clearing per Source makes a batch
+re-read every shared image).
+
+In 3c1 one command *is* one Job, so clearing inside `handle` would look right and would bake in the
+wrong granularity the moment a command covers many Sources. **Only the caller knows where a Job
+begins**, because the caller owns the Typesetter's lifetime.
+
+So `handle` leaves it alone and the doc comment says why. This is the rare full-picture check that
+removes work rather than adding it.
+
+### J4 · `JobError` is internal; the edge converts it — `INV-8`
+
+`job.rs` uses a `Result` internally, because that is what Rust is for. `handle` converts at the
+boundary:
+
+| Internal failure | Emitted |
+|---|---|
+| Source unreadable, not UTF-8 | `Event::Failed` |
+| Image unreadable (E2, the TOCTOU gap) | `Event::Failed` |
+| Output already exists (E3) | `Event::Failed` |
+| Typst compilation failed | `Event::CompilationFailed` |
+| Output unwritable | `Event::Failed` |
+
+Nothing important is reported only by returning it.
+
+### Merge T18 into T17
+
+T18 was "end-to-end tests over a temp directory" as a separate task. **That is the wrong split**:
+CLAUDE.md requires tests alongside the code, and a walking skeleton whose tests arrive as a later
+task is a skeleton nobody has walked. T17 lands with its tests; T18 is dropped rather than left as
+an empty box to tick.
+
+### Tests
+
+- A markdown file with no images converts; the PDF lands at the expected path.
+- **A real PNG on disk ends up in the PDF** — resolution, manifest, broker read and `add_file`
+  meeting outside a stub for the first time.
+- A missing image degrades to a placeholder, the Job still succeeds, and the Compromise reaches the
+  event stream (`INV-4`).
+- A source that does not exist emits `Failed` and writes nothing.
+- An existing output path emits `Failed` and **leaves the original bytes untouched** (`INV-3`).
+- Events arrive in order, ending with `OutputWritten`.
+
 ## Work breakdown
 
 | | Task | Deliverable |
 |---|---|---|
 | ✅ **T15** | `md2pdf-paths`: `PathBroker` + `PathError` | read/write/exists; the first real `std::fs` in the tree |
 | ✅ **T16** | `contract.rs`: `Command`/`Event` | plain data, serde round-trippable; failure travels as an Event (`INV-8`) |
-| **T17** | `job.rs`: the sequence above + `BrokerImages` | one Source, disk to disk |
-| **T18** | End-to-end tests over a temp directory | the first tests that touch a real filesystem |
+| **T17** | `job.rs` + `BrokerImages` + `mirror::output_path` + `paths::testing` | one Source, disk to disk, with its tests |
+| ~~T18~~ | *merged into T17 — tests ship with the code, not after it* | — |
 
 ## Tests
 
