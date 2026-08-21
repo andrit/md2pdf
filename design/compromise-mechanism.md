@@ -214,6 +214,12 @@ Not scheduled — recorded so the options are on the table when the time comes.
 
 **Every ladder change re-measures the baseline in §6 and updates it here.**
 
+> **This rule is currently honour-system, which is the thing it warns about.** Nothing enforces it,
+> nothing notices when it is skipped, and §6 is a snapshot with no history — so a drift spread over
+> three changes is invisible. **T27** builds the tripwire: a committed fixture corpus, a test that
+> asserts the decision distribution, and a census file whose *git history is the log*. Planned in
+> `design/plan-ladder-order.md`.
+
 A change that reduces one kind of Compromise while quietly increasing another, or that lowers the
 flagged count by making the gate less honest, is a regression — and the only way to see it is to
 keep the numbers side by side.
