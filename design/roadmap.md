@@ -76,8 +76,8 @@ Detail lives in the phase plans; this is the index.
 | T24 | Guard G2 — no UI deps — **unblocked: adapter is an in-workspace crate** | guards | ☐ |
 | T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
 | T26a | Tables reflow instead of clipping (option C) | 3d | ✅ staged |
-| T27 | **Ladder census** — committed fixture corpus + decision baseline *(the tripwire)* | 3d | ☐ **next, before T26b** |
-| T26b | **Ladder order** — reflow before deep shrink? *(R2)* | 3d | ☐ after T27 |
+| T27 | **Ladder census** — committed fixture corpus + decision baseline *(the tripwire)* | 3d | ✅ staged |
+| T26b | **Ladder order** — reflow before deep shrink? *(R2)* | 3d | ☐ **next** — instrument is in place |
 | T26c | Floors chosen against the corpus, after the order is settled | 3d | ☐ |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already

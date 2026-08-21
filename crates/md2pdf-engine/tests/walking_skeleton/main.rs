@@ -7,6 +7,14 @@
 //!
 //! `TempDir` is borrowed from `md2pdf-paths` so `std::fs` stays inside the one crate
 //! allowed to call it (`INV-9`).
+//!
+//! Several files, one test binary. Each `tests/*.rs` is a separate binary statically
+//! linking ~250 typst crates, and two linking at once exhausts a 4 GB machine — so the
+//! census joins this target as a module rather than becoming a fourth. Same arrangement
+//! as `md2pdf-convert`'s `tests/compiler/`, and for the same reason.
+//! See `docs/development.md`.
+
+mod census;
 
 use std::path::Path;
 
@@ -15,7 +23,7 @@ use md2pdf_engine::{handle, Command, Deps, Event};
 use md2pdf_paths::{testing::TempDir, PathBroker};
 use md2pdf_typeset::Typesetter;
 
-const PNG: &[u8] = include_bytes!("../../md2pdf-typeset/tests/fixtures/wide-200x20.png");
+const PNG: &[u8] = include_bytes!("../../../md2pdf-typeset/tests/fixtures/wide-200x20.png");
 
 /// Run one Command and collect what the engine said.
 fn run(source: &Path, destination: &Path) -> Vec<Event> {

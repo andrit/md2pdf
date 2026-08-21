@@ -17,6 +17,13 @@ crates. Three of them exist (`md2pdf-typeset`'s `contract`, `md2pdf-convert`'s `
 `md2pdf-engine`'s `walking_skeleton`), and linking two at once exhausts memory on a 4 GB machine.
 `signal 9` is the tell; without looking for it the failure reads as a flake and gets retried.
 
+**So do not add a fourth.** Cargo makes a test target of every `tests/*.rs` *and* every
+`tests/<name>/main.rs` — but not of other files inside such a directory. A new integration test
+therefore joins an existing target as a module rather than becoming its own binary:
+`md2pdf-convert/tests/compiler/` and `md2pdf-engine/tests/walking_skeleton/` are both directories
+for this reason, and the target keeps the directory's name. Plain data directories
+(`tests/corpus/`, `tests/fixtures/`) are ignored by cargo and cost nothing.
+
 **Already handled for the gate.** `scripts/verify.sh` runs its test step with `-j 1`, so links are
 serial. Clippy has compiled the graph by then, so that step is mostly linking and serialising it
 costs little.

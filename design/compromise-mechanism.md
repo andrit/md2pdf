@@ -214,11 +214,29 @@ Not scheduled — recorded so the options are on the table when the time comes.
 
 **Every ladder change re-measures the baseline in §6 and updates it here.**
 
-> **This rule is currently honour-system, which is the thing it warns about.** Nothing enforces it,
-> nothing notices when it is skipped, and §6 is a snapshot with no history — so a drift spread over
-> three changes is invisible. **T27** builds the tripwire: a committed fixture corpus, a test that
-> asserts the decision distribution, and a census file whose *git history is the log*. Planned in
-> `design/plan-ladder-order.md`.
+**Enforced since T27** — it was honour-system until then, which is the thing it warns about.
+
+`design/ladder-census.txt` records what the ladder decides for each fixture in
+`crates/md2pdf-engine/tests/corpus/`, and `the_ladder_still_decides_what_it_decided` regenerates it
+and fails on any difference. **The census file's git history is the log**: every ladder change
+leaves a diff naming which kinds moved, beside the reasoning in `commit-log.md`. There is no
+separate log format to maintain.
+
+```bash
+# after changing the ladder, take the new reading and commit it with the change:
+cargo test -p md2pdf-engine --test walking_skeleton regenerate_the_census -- --ignored --nocapture
+
+# to see sizes and factors, which the census deliberately omits:
+cargo test -p md2pdf-engine --test walking_skeleton describe_the_fixtures -- --ignored --nocapture
+```
+
+Two baselines, answering different questions. The **fixture census** measures *the mechanism* — one
+clean case per rung, committed, reproducible forever. The §6 numbers measure *reality* — the mix of
+documents a person actually has, which is what R1 is about, and which cannot be reproduced if
+`documents/` is deleted. Both stay; only the first is automated.
+
+**The census records kinds, not sizes.** A shrink moving 8.5pt → 8.0pt is tuning; a shrink becoming
+a rotation is a change of behaviour. Only the second should turn the build red.
 
 A change that reduces one kind of Compromise while quietly increasing another, or that lowers the
 flagged count by making the gate less honest, is a regression — and the only way to see it is to

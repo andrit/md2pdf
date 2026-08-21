@@ -293,3 +293,52 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Not applied to a table nested inside a blockquote, which is emitted into the parent's body and
   > is not separable — the same nested-atomics ceiling already recorded in `classify.rs`.
+
+- `<pending>` **test: a census of the ladder's decisions** (T27).
+
+  > Makes `compromise-mechanism.md` §9 — *every ladder change re-measures the baseline* — a build
+  > failure instead of a rule people must remember. It was honour-system, which is the failure mode
+  > the document exists to warn about: nothing enforced it, nothing noticed when it was skipped, and
+  > §6 was a snapshot with no history, so a drift spread over three changes was invisible.
+  >
+  > Golden hashes for **decisions** rather than bytes. They pin a PDF's bytes and would catch a
+  > ladder change as an opaque mismatch on whichever fixture happened to hold a wide table; they
+  > cannot say *"rotations went from 84 to 12"*, which is the thing worth seeing.
+  >
+  > Three parts. A committed corpus of 12 fixtures, one per rung and edge — unlike `documents/`,
+  > which is untracked, borrowed, and may be deleted, and **a baseline that cannot be reproduced is
+  > not a baseline**. A committed `design/ladder-census.txt`. And a test that regenerates it and
+  > compares, so the file is the record and the test is only the tripwire — they cannot disagree,
+  > and updating the baseline is a reviewable edit rather than a number changed inside a test.
+  >
+  > **The census file's git history is the log.** Every ladder change leaves a diff naming which
+  > kinds moved, beside the reasoning here. No separate log format to invent or maintain.
+  >
+  > Records kinds, not sizes: 8.5pt → 8.0pt is tuning, a shrink becoming a rotation is behaviour,
+  > and only the second should turn the build red.
+  >
+  > **The tripwire was proved to fire**, not assumed to — a guard that has never failed is not known
+  > to be one. A row appended to `rotate.md` reported `was: 1 rotated, 1 shrunk / now: 1 rotated,
+  > 2 shrunk`, then the regenerate command and the instruction to commit the new reading *with* the
+  > change. That last part is the lesson the golden hashes already taught.
+  >
+  > **Two fixtures were not doing what their names claimed** — written from reasoning about widths,
+  > and wrong. `shrink-slight.md` was clean (429pt against 483pt available) and `shrink-floor.md`
+  > stopped at 7.5pt. Both re-measured: now 9.0pt and exactly 7.0pt. This also exposed something
+  > reasoning would not have predicted — **a table's width is not linear in font size**, since
+  > padding and gutters do not scale, so the portrait shrink band tops out near 649pt rather than
+  > the 690pt that `483 / 0.7` implies, and a wider table rotates instead of reaching the floor.
+  >
+  > Finding that needed per-element sizes, which the census deliberately omits. Rather than the
+  > throwaway id-matching probe R4 describes, `describe_the_fixtures` was added as the inspection
+  > counterpart to the tripwire.
+  >
+  > `tests/walking_skeleton.rs` became `tests/walking_skeleton/main.rs` with `census.rs` beside it.
+  > Every `tests/*.rs` is a binary statically linking ~250 typst crates and two linking at once
+  > exhaust a 4 GB machine, so a new integration test joins an existing target as a module — the
+  > arrangement `md2pdf-convert/tests/compiler/` already uses, and for the same reason. The target
+  > name is unchanged, so the commands in `docs/development.md` still work.
+  >
+  > Built **before** T26b deliberately: the census is the instrument that measures whether the
+  > reordering worked, and building it afterwards means judging the change with the thing it
+  > altered.

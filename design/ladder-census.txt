@@ -1,0 +1,24 @@
+# Ladder census — decisions made for each fixture in md2pdf-engine/tests/corpus.
+#
+# Regenerate:
+#   cargo test -p md2pdf-engine --test walking_skeleton regenerate_the_census \
+#        -- --ignored --nocapture
+#
+# A change here is a change in behaviour. If it was intended, commit this file
+# in the same commit as the change and say why. If it was not, you have found a
+# defect in something you were not touching.
+#
+# See design/compromise-mechanism.md
+
+fits.md                 3 elements   clean
+image-clipped.md        3 elements   1 CLIPPED, 1 rotated
+image-fits.md           2 elements   clean
+image-missing.md        2 elements   1 image-missing
+image-remote.md         3 elements   1 image-skipped
+image-scaled.md         2 elements   1 rotated, 1 scaled
+reflow-hostile.md       3 elements   1 reflowed, 1 rotated
+reflow.md               3 elements   1 reflowed, 1 rotated
+rotate.md               3 elements   1 rotated, 1 shrunk
+shrink-floor.md         3 elements   1 shrunk
+shrink-slight.md        3 elements   1 shrunk
+unsupported.md          2 elements   2 unsupported
