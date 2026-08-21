@@ -407,3 +407,66 @@ fn an_empty_directory_completes_with_zeroes() {
 
     assert_eq!(completion(&events), (0, 0, 0, 0));
 }
+
+/// Where the time goes, per phase. Kept as a tool rather than deleted: the next time
+/// someone asks "what is slow", this answers it in one command.
+///
+///     cargo test -p md2pdf-engine --test walking_skeleton profile_the_phases -- --ignored --nocapture
+///
+/// Reads from `documents/`, which is untracked — it skips cleanly when absent.
+#[test]
+#[ignore = "profiling tool, not a gate"]
+fn profile_the_phases() {
+    use md2pdf_convert::{convert, SourceContext};
+    use std::time::Instant;
+
+    let broker = PathBroker::new();
+    let template = Template::default();
+
+    // Tests run with CWD = crate dir, so anchor on the workspace root.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for name in [
+        "documents/design-docs/design__event-storm.md",
+        "documents/factory/micro-saas-ideas.md",
+        "documents/design-docs/design__kano.md",
+    ] {
+        let owned = root.join(name);
+        let path = owned.as_path();
+        let Ok(markdown) = broker.read_to_string(path) else {
+            println!("SKIP {name}");
+            continue;
+        };
+
+        let t0 = Instant::now();
+        let conversion = convert(&markdown, &SourceContext::none());
+        let convert_ms = t0.elapsed().as_millis();
+
+        let ts = Typesetter::new();
+        let t1 = Instant::now();
+        let (map, _) = ts.probe(&conversion.elements, &template).expect("probe");
+        let probe_ms = t1.elapsed().as_millis();
+
+        let t2 = Instant::now();
+        let compilation = ts
+            .render(&conversion.elements, &template, &map)
+            .expect("render");
+        let render_ms = t2.elapsed().as_millis();
+
+        let t3 = Instant::now();
+        let pdf = compilation.pdf().expect("pdf");
+        let pdf_ms = t3.elapsed().as_millis();
+
+        let atomic = conversion
+            .elements
+            .iter()
+            .filter(|e| e.class.is_atomic())
+            .count();
+        println!(
+            "PROF {:<42} elements={:<4} atomic={:<3} convert={:>5}ms probe={:>6}ms render={:>5}ms pdf={:>4}ms  bytes={}",
+            path.file_name().unwrap().to_string_lossy(),
+            conversion.elements.len(),
+            atomic,
+            convert_ms, probe_ms, render_ms, pdf_ms, pdf.len()
+        );
+    }
+}
