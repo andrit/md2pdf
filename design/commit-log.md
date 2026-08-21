@@ -359,3 +359,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > Built **before** T26b deliberately: the census is the instrument that measures whether the
   > reordering worked, and building it afterwards means judging the change with the thing it
   > altered.
+- `<pending>` docs: backfill commit-log hashes; script the half that was honour-system

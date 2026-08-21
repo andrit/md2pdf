@@ -109,6 +109,45 @@ all of them are speculative generality.
 
 ---
 
+## Planning discipline — measured or assumed
+
+**Added 2026-08-21**, from a pattern across T7, T21, T26a and T27: plans keep changing mid-build,
+and the changes are not all the same kind of thing.
+
+Four classes, and only three are worth preventing:
+
+| Class | Example | Prevent? |
+|---|---|---|
+| **A · Reasoned where it could have measured** | "most rotations are tables" *(it was 100%)*; fixture widths that turned out not to shrink; the clip threshold before D1 measured it | **yes** — and it is the common one |
+| **B · The plan was right; the build drifted** | `plan-census.md` said the census must be a *module*; it was first written as a fourth test binary | **yes** — re-read the plan at build start |
+| **C · Genuine discovery only building could produce** | Typst's escape set — 51 of 113 candidates broke; the italic font axis; table width is not linear in font size | **no — this is the work** |
+| **D · A claim outrunning its evidence** | "VERIFIED" written against D1/D2 before the checks were run; "staged" said from a handover note | **yes — most serious** |
+
+**The rule, for class A:** a plan may not assert a fact that a short measurement could settle.
+Anything about Typst's behaviour or about the corpus is either measured before the plan is finished,
+or **marked as an assumption in the text**. Assumptions are not forbidden; going unmarked is, because
+an unmarked assumption reads exactly like a measured fact to whoever builds from it — including me,
+a week later.
+
+**Why the doubts audit did not already catch this.** The audit reviews the doubts I *noticed*. Every
+class-A miss was a claim that felt like a fact at the time, so it never entered the list. The list is
+self-selected, and self-selection is the failure. So the audit is now two passes:
+
+1. **The doubts I have** — the existing ritual.
+2. **A sweep of the plan's own sentences** for quantitative or behavioural claims, each one marked
+   `[measured]` or `[assumed]`. Mechanical, and it does not depend on my having felt uncertain.
+
+`plan-ladder-order.md` is the first plan written this way, and the sweep immediately contradicted two
+of its own claims: rotation "for no gain" was false for 10 tables, and O1 turned out to delete a rung
+rather than reorder one.
+
+**What this deliberately does not do:** class C is the reason to build things. Measuring earlier does
+not suppress discovery — it moves the *knowable* half before the code, leaving the genuinely
+unknowable half where it belongs. If a plan stops changing entirely, that is a warning sign, not
+success: it means the build stopped being allowed to teach anything.
+
+---
+
 ## How to use this
 
 - A plan's decisions should **cite an invariant** (`INV-8`) or explicitly say "no invariant — simple

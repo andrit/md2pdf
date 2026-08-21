@@ -1,34 +1,70 @@
-# Plan — the order of the rungs (T26b), and a tripwire for the ladder (T27)
+# Plan — the order of the rungs (T26b)
 
 **Written:** 2026-08-21 · **Follows:** T26a, which added `Reflow` and exposed the question.
+**Revised:** 2026-08-21, after T27 built the census and the corpus was triaged by element class.
 **Reference:** `design/compromise-mechanism.md` — risk **R2**, and the baseline this must re-measure.
+
+Every claim below is marked **[measured]** or **[assumed]**. Assumptions are not forbidden; going
+unmarked is. See `design/invariants.md` — *Planning discipline*.
+
+*(T27, the census, was planned here originally and has moved to `design/plan-census.md`. It is
+built: `design/ladder-census.txt` + `the_ladder_still_decides_what_it_decided`.)*
 
 ---
 
 ## The problem, stated plainly
 
-The ladder shrinks **before** it reflows. A table needing 90% of its width is squeezed to ~9pt
-rather than being reflowed at full size, and **41 elements are currently rendered at 7.0–7.5pt**.
+The ladder shrinks **before** it reflows. A table needing 90% of its width is squeezed rather than
+reflowed at full size. **[measured]** 41 of 163 shrinks land at 7.0–7.5pt.
 
-The comparison rendered while building T26a says that preference is backwards:
+The comparison rendered during T26a says that preference is backwards **[measured, by eye]**:
 
 - `columns: 5` shrunk to 7pt — cramped, legible only just.
 - `columns: (1fr × 5)` at 10pt — full-size text, wrapped cells, clearly easier to read.
 
 **Reflow went last because it was the conservative code change**, not because it produces the worst
-outcome. That is the shape of the failure this whole document family exists to catch: every step
-defensible, the sequence wrong.
+outcome. That is the shape of failure this document family exists to catch: every step defensible,
+the sequence wrong.
 
-## What is actually being asked
+---
 
-Not "is reflow good" — T26a settled that. The question is **how much shrinking is worth accepting
-before wrapping is preferable**, and that is a judgment about reading, not a measurement.
+## What the corpus actually contains — measured 2026-08-21
+
+The earlier draft of this plan assumed *"most rotated elements are tables."* Triaged by element
+class across all 146 documents, the truth is stronger and simpler **[measured]**:
+
+```
+table / portrait   shrink   114          198 compromised elements
+table / landscape  shrink    49          every one of them a TABLE
+table / landscape  reflow    25          zero images reach the ladder
+table / landscape  none      10
+```
+
+Cross-checks against the §6 baseline: rotations `10 + 25 + 49 = 84` ✓, shrinks `114 + 49 = 163` ✓,
+reflows `25` ✓.
+
+Three consequences, none of which the original plan accounted for:
+
+**1. The ladder is, in practice, a table mechanism.** `Code` wraps and `Image` scales, so the
+text-atomic branch only ever sees a `Table` **[measured — `ElementClass::is_atomic` is
+`Table | Image`, and `Image` takes the scale branch]**. Every `ShrunkToFloor` in the product comes
+from a table.
+
+**2. All 84 rotations are tables, and every one can reflow.** Not "most". Under any option that
+prefers an alternate form to rotation, **table rotation goes to zero**, and since no image in the
+corpus reaches the ladder, rotation disappears from this corpus entirely.
+
+**3. The 10 `landscape/none` tables are a counter-example to this plan's own argument.** The
+earlier draft called rotation *"a large disruption to the reading order for no gain."* For these 10
+that is **false** — they rotated and then fit at full size, keeping the author's column proportions
+with nothing given up but the page turn. The sentence has been corrected rather than quietly
+dropped, and the case it was wrong about is now a decision point below.
 
 ---
 
 ## The options
 
-### O1 · Reflow immediately — an alternate form always wins
+### O1 · An alternate form always wins — **deletes a rung**
 
 ```
 fits -> None
@@ -36,17 +72,21 @@ has an alternate -> Reflow
 otherwise -> shrink / rotate / clip
 ```
 
-Tables never shrink and never rotate. Simplest rule in the codebase, and the easiest to explain to
-a user: *"tables wrap, everything else scales."*
+Simplest rule in the codebase: *"tables wrap, everything else scales."*
 
-**Cost:** a table needing 98% of the width reflows rather than shrinking imperceptibly to 9.8pt.
-Column proportions the author chose are discarded for a problem nobody would have seen.
+**Cost, and it is larger than the earlier draft recognised.** Since every shrink in the product is a
+table **[measured, §above]**, tables never shrinking means `Reduction::Shrink` becomes **unreachable
+code for the entire product** — `Floors::table_pt`, `code_pt` and `prose_pt` stop having any effect.
+The census would say so out loud: `the_census_covers_every_compromise_kind` fails with *"no fixture
+produces `shrunk`"*. That is the guard working, and it is also the clearest possible statement of
+what O1 costs: a table needing 98% of the width reflows rather than shrinking imperceptibly to
+9.8pt, and the authored column proportions are discarded for a problem nobody would have seen.
 
 ### O2 · Reflow past a comfort threshold — **recommended**
 
 ```
 fits                          -> None
-shrink, if >= comfort floor   -> Shrink        (a small, unnoticeable adjustment)
+shrink, if >= comfort floor   -> Shrink        (small, unnoticeable)
 has an alternate              -> Reflow
 otherwise                     -> rotate / clip
 ```
@@ -60,7 +100,17 @@ with a different meaning from the existing one:
 | **comfort floor** (~9pt?) | how small before wrapping is *nicer* |
 
 This also **sharpens T26c**. "How small is too small" is nearly unanswerable; "at what point would
-you rather the table wrapped" is a question a person can look at two pages and answer.
+you rather the table wrapped" is a question a person can answer by looking at two pages.
+
+**O2 splits on what happens to rotation**, and finding #3 above is what forces the split:
+
+- **O2a — reflow before any rotation.** Table rotation vanishes; rotation becomes an image-only
+  rung. Costs the 10 `landscape/none` tables their full-size, correctly-proportioned landscape page.
+- **O2b — try landscape at base size first, then reflow.** Keeps those 10 exactly as they are, and
+  reflows only where landscape would *also* require shrinking below the comfort floor.
+
+O2b is strictly more conservative and strictly more complex. **[assumed]** the difference matters to
+a reader; that assumption is what the evidence below is for.
 
 ### O3 · Reflow before rotating, after shrinking
 
@@ -68,98 +118,140 @@ you rather the table wrapped" is a question a person can look at two pages and a
 fits -> shrink to floor -> Reflow -> rotate -> clip
 ```
 
-Tables reflow rather than rotate; rotation becomes an image-only rung. Rotation is the most
-disruptive outcome in the ladder — a landscape page interrupts reading order — so avoiding it for
-anything with an alternate has real appeal.
-
-**Cost:** still shrinks all the way to 7pt first, which is the outcome the evidence already
-questions. Fixes the wrong half.
+Still shrinks all the way to 7pt first, which is the outcome the evidence already questions. Fixes
+the wrong half.
 
 ---
 
-## Recommendation
+## What each comfort floor would do — simulated, not implemented
 
-**O2**, with the comfort floor as the tunable and `Reflow` placed before rotation as well — so a
-table wraps rather than taking a landscape page of its own.
+The probe's `choose()` is a monotonic scan and portrait is decided before anything else, so a
+comfort floor `F` changes exactly one thing: a portrait shrink at size `s` stays iff `s >= F`, and
+otherwise reflows. That makes the counts computable from the measured distribution without writing
+the implementation first **[measured — simulated over the real corpus, O2a]**:
 
-Expected effect on the baseline, to be confirmed by measurement rather than asserted:
+| Comfort floor | shrunk | reflowed | rotated | flagged |
+|---|---|---|---|---|
+| none *(today)* | 163 | 25 | 84 | 70 (48%) |
+| 8.0pt | 86 | 112 | 0 | 70 (48%) |
+| **9.0pt** | 46 | 152 | 0 | 70 (48%) |
+| 9.5pt | 19 | 179 | 0 | 70 (48%) |
 
-- shrinks below the comfort floor become reflows — up to **41** of the current 163 at 7.0–7.5pt
-- **84 rotations** should fall sharply, since most rotated elements are tables
-- the flagged percentage should **not** move much: reflow is still a Compromise, and R1 stays open
+**The flagged count does not move, at any setting.** That is the correct and expected result — the
+same elements are compromised, just differently — and it is worth stating plainly because it means
+**T26b does nothing for R1**. If a candidate ever *did* drop the flagged count, something is being
+hidden rather than fixed.
 
-If flagged drops a lot, something is being hidden rather than fixed — see R1.
+**Boundary semantics, pinned:** a shrink is kept iff `chosen_size >= comfort_floor`. At `F = 9.0` a
+table that shrinks to exactly 9.0pt stays shrunk.
+
+---
+
+## Implementation sketch
+
+Small, and confined to one branch:
+
+- **`Floors` gains one field** — a table-only comfort floor, beside `table_pt`, documented with the
+  two-questions table above. **[assumed]** table-only is right: prose and code never reach this
+  branch today, so a per-class comfort floor would be three fields of which two are dead.
+- **The reorder lives entirely in `probe.rs`'s text-atomic branch.** The image branch is untouched —
+  images have no alternate and their ladder is unchanged.
+- **`render.rs` needs no change** **[measured — read, not assumed]**. Reflow swaps the body for the
+  alternate and orientation places it, with neither step aware of the other, so *reflow in portrait*
+  already works: `(Reduction::Reflow, Some(alternate)) => alternate.to_string()`, then a separate
+  `match decision.orientation`.
+- **One golden hash moves** **[measured]** — `the_escalation_ladder_is_unchanged`, which holds an
+  8-column table and is named for exactly this. The other five goldens hold no table. Regenerating
+  it is a build step, recorded in the commit with what moved and why.
+
+### Predicted census diff — acceptance criteria, written before the build
+
+Under **O2a, F = 9.0**, `design/ladder-census.txt` should change like this **[assumed — this is the
+prediction the build tests]**:
+
+| Fixture | Now | Predicted |
+|---|---|---|
+| `shrink-floor.md` | 1 shrunk *(7.0pt)* | 1 reflowed |
+| `shrink-slight.md` | 1 shrunk *(9.0pt)* | 1 shrunk — **on the boundary, kept** |
+| `rotate.md` | 1 rotated, 1 shrunk | 1 reflowed — **name goes stale, rename it** |
+| `reflow.md` | 1 reflowed, 1 rotated | 1 reflowed *(portrait now)* |
+| `reflow-hostile.md` | 1 reflowed, 1 rotated | 1 reflowed *(portrait now)* |
+| image fixtures | unchanged | unchanged — they keep `rotated` and `scaled` covered |
+
+If the real diff differs from this table, **the simulation above was wrong** and its numbers cannot
+be trusted for the corpus either. That is the cheap check on the whole analysis, and it costs
+nothing because the census is regenerated anyway.
+
+`shrink-slight.md` sitting exactly on the boundary is deliberate: it is the fixture that pins the
+`>=` semantics, and it fails loudly if the comparison is ever flipped.
+
+### Also worth building here
+
+**Keep the corpus triage as a real instrument.** The class breakdown at the top of this document
+required a throwaway probe, written twice now — once for T26a's clip triage and once for this. That
+is **R4** in practice. Propose adding `triage_the_real_corpus` as an ignored test beside
+`describe_the_fixtures`, taking its directory from an env var and defaulting to the fixture corpus,
+so `documents/` stays untracked and optional.
 
 ---
 
 ## Evidence to produce before deciding
 
-I produce these; **the call is yours** — it is a judgment about what reads well in your documents.
+I produce these; **the call is yours** — it is a judgment about what reads well in your documents,
+and no measurement settles it.
 
 1. **A comparison sheet**: one real wide table rendered five ways — 9.5pt, 9pt, 8pt, 7pt, and
    reflowed at full size — on one page, labelled.
-2. **The same for a hostile case**: the widest table in the corpus (582-character row, and the
-   12-column case), where reflow squeezes columns hardest. This is where reflow looks *worst*, and
-   it is the case that decides whether O1 is safe.
-3. **Counts per option**: run the corpus under each candidate comfort floor (none / 9pt / 8pt) and
-   report the resulting distribution against the baseline in `compromise-mechanism.md` §6.
+2. **The hostile case**: the 12-column table, where reflow squeezes columns hardest and looks
+   *worst*. This is the case that decides whether O1 is safe.
+3. **The rotation pair**, which finding #3 makes necessary: one of the 10 `landscape/none` tables
+   rendered as it is today — landscape, full size, authored proportions — beside the same table
+   reflowed in portrait. **This one question decides O2a vs O2b.**
 
-Item 2 matters most: **O2's whole justification is that reflow beats deep shrinking.** If a
-12-column reflow is unreadable, the answer is a *column-count* condition rather than a size one, and
-the plan changes.
+Item 2 matters most for the floor; item 3 for the shape of the rule.
 
 ## Exit criteria
 
 1. The order is decided, by you, from rendered evidence rather than reasoning.
-2. `compromise-mechanism.md` §6 baseline re-measured and updated; R2 closed or re-scoped.
-3. `verify.sh` green.
+2. The census diff matches the prediction above, or the discrepancy is explained.
+3. `compromise-mechanism.md` §6 re-measured and updated; R2 closed or re-scoped; R5 revisited —
+   rotation reaching zero means another signal has gone quiet.
+4. `the_escalation_ladder_is_unchanged` regenerated deliberately, with the reason recorded.
+5. `verify.sh` green.
 
 ---
 
-# T27 · A tripwire for the ladder
+## Doubts — audited before building
 
-**Answering the standing question: is there a mechanism to check against the Compromise
-documentation, and should the interaction be logged?**
+### D1 · Is the simulation valid? — **not verified, and cheap to check later**
 
-Today: **no, and it is honour-system.** §9 of `compromise-mechanism.md` says every ladder change
-re-measures the baseline. Nothing enforces it, nothing notices when it does not happen, and the
-baseline is a single snapshot with no history — so a slow drift across three changes is invisible.
+The counts assume reordering does not disturb the portrait shrink sizes. Sound in principle: portrait
+is measured first and the comfort floor only decides what happens *after* **[measured — read from
+`probe.rs`]**. But it is still a model of the code rather than the code.
 
-That is precisely the failure mode being guarded against, left unguarded.
+Verified for free at build time by comparing the predicted census diff against the real one, and the
+corpus counts against a fresh run. Recorded rather than resolved because resolving it early costs
+more than the check will.
 
-### Why the golden hashes do not cover this
+### D2 · Does a comfort floor make the two floors confusable? — **not verified, accepted**
 
-They pin the *bytes* of a rendered PDF. They would catch a ladder change — as an opaque hash
-mismatch, on a fixture that happens to contain a wide table. They cannot say *"rotations went from
-84 to 12"*, which is the thing worth seeing.
+Two numbers on the same class, both in points, answering different questions. A future reader may
+well tune the wrong one. Mitigated by naming and by the two-questions table; **[assumed]** that is
+enough, and it is the kind of thing only a later reader can disprove.
 
-### What to build
+### D3 · Is 12-column reflow readable? — **unverified, and it gates O1**
 
-**A ladder census** — golden hashes for *decisions* rather than bytes.
+`compromise-mechanism.md` R3 says a 12-column reflow squeezes to ~40pt per column, possibly one word
+per line. `reflow-hostile.md` exists for this and **nobody has looked at it yet**. Evidence item 2.
 
-- **A committed fixture corpus**, ~10 documents, one per rung and edge: a table that fits, one that
-  shrinks slightly, one that shrinks to the floor, one that rotates, one that reflows, a 12-column
-  monster, an oversized image, a missing image, a remote image, raw HTML.
-  **Committed, unlike `documents/`**, which is untracked, borrowed and may be deleted — a baseline
-  that cannot be reproduced is not a baseline.
-- **A test asserting the exact distribution** it produces: *N shrunk, N rotated, N reflowed, N
-  clipped*. Any ladder change turns it red with a readable diff, and the failure message says what
-  the numbers were and what they became.
-- **A committed census file** regenerated by the same command. Its **git history is the log** —
-  every ladder change leaves a diff showing exactly which kinds moved, alongside the reasoning
-  already captured in `commit-log.md`. No separate log format to maintain.
+If it is unreadable, the answer is a *column-count* condition rather than a size one, and O1 is
+unsafe at any floor.
 
-### Why this is worth building rather than trusting discipline
+### D4 · Does rotation going to zero lose a signal? — **live, carried forward as R5**
 
-The gate test in `invariants.md` asks: cheap now, and lossy later? **Yes to both.** The fixture
-corpus and census are perhaps an hour; and information not measured at the time of a change cannot
-be recovered afterwards — you cannot go back and ask what the distribution was three commits ago
-unless something recorded it.
+Rotation is currently the loudest thing in the census after clipping, and every option here takes it
+to zero for tables. **[measured]** no image in the corpus reaches the ladder, so the `rotated` rung
+would be exercised only by the fixture corpus.
 
-It also converts the mechanism's central risk from a rule people must remember into a build failure.
-
-### Sequencing
-
-**T27 before T26b.** The census is the instrument that measures whether the reordering worked;
-building the instrument after the change means the change is evaluated by the thing it altered.
-Build the tripwire, take the baseline, *then* move the rungs.
+That is not an argument against the change; it is a note that the fixture census becomes the *only*
+place rotation is observed, which is an argument for the fixture corpus existing at all.
