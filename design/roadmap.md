@@ -4,6 +4,8 @@
 
 > **The target model is `design/invariants.md`**; the record of *why* each commit happened is
 > `design/commit-log.md`. Proposals not yet scheduled live in `design/feature-design/`.
+> **`design/compromise-mechanism.md`** documents the escalation ladder, its baseline measurements,
+> and its risk register — *every ladder change re-measures that baseline.*
 >
 > **`design/invariants.md`** This document is the *sequence*; that one is what
 > must be true when we are done. Decisions cite an invariant, or say "no invariant — simple thing".
@@ -74,7 +76,8 @@ Detail lives in the phase plans; this is the index.
 | T24 | Guard G2 — no UI deps — **unblocked: adapter is an in-workspace crate** | guards | ☐ |
 | T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
 | T26a | Tables reflow instead of clipping (option C) | 3d | ✅ staged |
-| T26b | Floors chosen against the corpus, after T26a | 3d | ☐ next |
+| T26b | **Ladder order** — should reflow precede shrink/rotate? *(R2, evidence says yes)* | 3d | ☐ next |
+| T26c | Floors chosen against the corpus, after the order is settled | 3d | ☐ |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a
