@@ -60,13 +60,29 @@ pub enum Event {
     /// moment between them. Emitting both would claim a granularity the API does not
     /// have. The storm describes the domain; this describes what can actually be seen.
     ///
-    /// `compromises` travels from here on (`INV-4`): a concession not emitted cannot
-    /// be recovered later, even though nothing consumes it until the attention gate.
+    /// Counts only. The **complete** set of concessions arrives later, in
+    /// [`Event::DiagnosticSealed`] — see the note there.
     SourceConverted {
         /// Which Source. Per-Source events are meaningless in a batch without it.
         source: PathBuf,
         elements: usize,
         images: usize,
+        /// How many concessions conversion made. The *what* comes with the seal.
+        compromises: usize,
+    },
+    /// Every concession made for this Source, from **both** halves of the pipeline
+    /// (`INV-4`).
+    ///
+    /// This event exists because of a real gap found by running 146 real documents
+    /// through the CLI: the engine sealed a Diagnostic, used it to decide whether the
+    /// document was *flagged*, and then threw the contents away. 70 documents were
+    /// reported as needing attention and only 2 could say why — every escalation-ladder
+    /// decision (shrunk, rotated, clipped) died at the boundary.
+    ///
+    /// Conversion-time concessions alone are half the truth, so `SourceConverted` no
+    /// longer carries them: there is one complete answer rather than two partial ones.
+    DiagnosticSealed {
+        source: PathBuf,
         compromises: Vec<Compromise>,
     },
     CompilationSucceeded {
@@ -141,6 +157,10 @@ mod tests {
                 source: PathBuf::from("/docs/notes.md"),
                 elements: 12,
                 images: 2,
+                compromises: 1,
+            },
+            Event::DiagnosticSealed {
+                source: PathBuf::from("/docs/notes.md"),
                 compromises: vec![Compromise {
                     id: ElementId::new(3, "#table(columns: 2, [a], [b])"),
                     kind: CompromiseKind::ImageMissing,
@@ -251,20 +271,20 @@ mod tests {
                 sink(event);
             }
         }
-        assert_eq!(seen.len(), 8);
+        assert_eq!(seen.len(), 9);
         assert!(matches!(seen[0], Event::SourceConverted { .. }));
-        assert!(matches!(seen[3], Event::OutputWritten { .. }));
-        assert!(matches!(seen[6], Event::BatchCompleted { .. }));
+        assert!(matches!(seen[1], Event::DiagnosticSealed { .. }));
+        assert!(matches!(seen[7], Event::BatchCompleted { .. }));
         // Order is the property under test, so the last one is checked too.
-        assert!(matches!(seen[7], Event::Failed { .. }));
+        assert!(matches!(seen[8], Event::Failed { .. }));
     }
 
     /// A compromise that reaches an adapter must still name its Element (`INV-4`).
     #[test]
     fn compromises_survive_the_boundary_intact() {
-        let event = all_events().remove(0);
+        let event = all_events().remove(1);
         let json = serde_json::to_string(&event).unwrap();
-        let Event::SourceConverted { compromises, .. } =
+        let Event::DiagnosticSealed { compromises, .. } =
             serde_json::from_str::<Event>(&json).unwrap()
         else {
             panic!("wrong variant");

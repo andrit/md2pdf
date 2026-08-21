@@ -207,7 +207,7 @@ fn convert_one(
         source: source.to_path_buf(),
         elements: conversion.elements.len(),
         images: conversion.images.len(),
-        compromises: conversion.compromises.clone(),
+        compromises: conversion.compromises.len(),
     });
 
     // Typst cannot load a file the World will not serve, and an unresolvable file
@@ -233,6 +233,15 @@ fn convert_one(
     // (`INV-4`). Flagged is not failed: the document converted, and something in it
     // needed a judgment call.
     let diagnostic = Diagnostic::seal(conversion.compromises.clone(), &decisions);
+
+    // Emit the whole thing, not just whether it is empty. Sealing it and reporting only
+    // `is_flagged()` is how a run can say "70 need your attention" and explain two.
+    if diagnostic.is_flagged() {
+        emit(Event::DiagnosticSealed {
+            source: source.to_path_buf(),
+            compromises: diagnostic.compromises.clone(),
+        });
+    }
 
     let compilation = deps
         .typesetter

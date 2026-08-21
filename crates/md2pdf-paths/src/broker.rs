@@ -31,6 +31,15 @@ pub enum PathError {
     NotUtf8 { path: PathBuf },
 }
 
+/// What lives at a path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathKind {
+    File,
+    Directory,
+    /// Nothing there — or something we cannot see, which amounts to the same thing.
+    Missing,
+}
+
 /// The one door to the filesystem.
 ///
 /// A struct rather than a trait: there is exactly one implementation, and the seam
@@ -102,6 +111,22 @@ impl PathBroker {
     /// keeps each module doing one thing.
     pub fn walk(&self, root: &Path) -> Result<crate::walk::SourceSet, PathError> {
         crate::walk::walk(root)
+    }
+
+    /// What is at this path, if anything.
+    ///
+    /// One call rather than `exists` then `is_dir`, because a caller deciding *what to
+    /// do* needs all three answers and asking twice invites the race. Exists so that
+    /// callers do not reach for `Path::is_dir` themselves — that would be path access
+    /// outside this crate, which is the thing `INV-9` is about.
+    pub fn kind(&self, path: &Path) -> PathKind {
+        if path.is_dir() {
+            PathKind::Directory
+        } else if path.is_file() {
+            PathKind::File
+        } else {
+            PathKind::Missing
+        }
     }
 
     /// True only for a file that exists and is actually a file.
@@ -218,6 +243,18 @@ mod tests {
         assert!(matches!(err, PathError::NotUtf8 { .. }));
         // The bytes are still readable — only the text interpretation is refused.
         assert!(broker.read_bytes(&file).is_ok());
+    }
+
+    #[test]
+    fn kind_tells_the_three_cases_apart() {
+        let tmp = TempDir::new("kind");
+        let broker = PathBroker::new();
+        let file = tmp.write("a.md", b"x");
+        fs::create_dir_all(tmp.join("adir")).expect("dir");
+
+        assert_eq!(broker.kind(&file), PathKind::File);
+        assert_eq!(broker.kind(&tmp.join("adir")), PathKind::Directory);
+        assert_eq!(broker.kind(&tmp.join("nope")), PathKind::Missing);
     }
 
     #[test]

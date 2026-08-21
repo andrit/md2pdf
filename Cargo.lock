@@ -1161,6 +1161,9 @@ version = "0.1.0"
 dependencies = [
  "md2pdf-domain",
  "md2pdf-engine",
+ "md2pdf-paths",
+ "md2pdf-typeset",
+ "pico-args",
  "serde_json",
 ]
 

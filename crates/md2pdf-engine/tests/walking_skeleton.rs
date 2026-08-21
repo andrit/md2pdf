@@ -83,15 +83,14 @@ fn a_real_image_on_disk_reaches_the_pdf() {
                 images,
                 compromises,
                 ..
-            } => Some((*images, compromises.clone())),
+            } => Some((*images, *compromises)),
             _ => None,
         })
         .expect("no SourceConverted event");
     assert_eq!(converted.0, 1, "the image was not resolved");
-    assert!(
-        converted.1.is_empty(),
-        "a resolvable image should not be a compromise: {:?}",
-        converted.1
+    assert_eq!(
+        converted.1, 0,
+        "a resolvable image should not be a compromise"
     );
 
     let written = written_path(&events).unwrap_or_else(|| panic!("no output: {events:?}"));
@@ -109,13 +108,14 @@ fn a_missing_image_degrades_and_is_reported() {
 
     let events = run(&source, &out);
 
+    // The complete set now arrives with the seal, not with SourceConverted.
     let compromises = events
         .iter()
         .find_map(|e| match e {
-            Event::SourceConverted { compromises, .. } => Some(compromises.clone()),
+            Event::DiagnosticSealed { compromises, .. } => Some(compromises.clone()),
             _ => None,
         })
-        .expect("no SourceConverted event");
+        .expect("no DiagnosticSealed event");
     assert!(
         compromises
             .iter()
@@ -193,6 +193,7 @@ fn events_arrive_in_the_order_the_work_happened() {
             Event::SourceSkipped { .. } => "skipped",
             Event::SourceFailed { .. } => "source_failed",
             Event::BatchCompleted { .. } => "batch_done",
+            Event::DiagnosticSealed { .. } => "flagged",
         })
         .collect();
     assert_eq!(shape, vec!["converted", "compiled", "written"]);

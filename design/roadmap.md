@@ -71,7 +71,9 @@ Detail lives in the phase plans; this is the index.
 | T21 | Batch `Command`/`Event` + orchestration | 3c2 | ✅ staged |
 | T22 | Guard G3 — determinism + golden-hash tests | guards | ✅ staged |
 | T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ✅ staged |
-| T24 | Guard G2 — no UI deps *(gated on adapter location)* | guards | ☐ |
+| T24 | Guard G2 — no UI deps — **unblocked: adapter is an in-workspace crate** | guards | ☐ |
+| T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
+| T26 | Triage the corpus run, then choose Floors | 3d | ☐ next |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a
@@ -96,7 +98,7 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 3b2 | Finish the escalation ladder — all atomic classes | ✅ code-complete 2026-08-20 (T14); `/phase-audit` not run | `/phase-audit` |
 | 3c1 | Engine — walking skeleton: one file, disk to disk | ✅ code-complete 2026-08-20 (T15–T17); `/phase-audit` not run | `/phase-audit` |
 | 3c2 | Paths + Output — widen to batch, collisions | ✅ code-complete 2026-08-20 (T19–T21); `/phase-audit` not run | `/phase-audit` |
-| **3d** | **CLI adapter, end to end** | **◐ next** | `/phase-audit` |
+| **3d** | **CLI adapter, end to end** | **◐ next — planned in `plan-cli.md` (T25–T26)** | `/phase-audit` |
 
 
 | 3e | Template catalogue + shipped template | planned | `/phase-audit` |
@@ -233,7 +235,7 @@ no UI.
 > and prefer reshaping it there, while the only consumer is a test, over discovering the problem in
 > phase 4 when an adapter depends on it.
 
-## 3d · CLI adapter, end to end
+## 3d · CLI adapter, end to end *(planned in `design/plan-cli.md`)*
 
 `md2pdf-cli` already documents itself as "adapter #1, not a throwaway": it runs in CI with no
 display, and a contract with one implementation is not a contract.

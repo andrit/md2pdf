@@ -4,7 +4,21 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+# The binary is `md2pdf`; the crate is `md2pdf-cli` so it can also expose a library for
+# its own tests.
+[[bin]]
+name = "md2pdf"
+path = "src/main.rs"
+
 [dependencies]
 md2pdf-engine = { path = "../md2pdf-engine" }
 md2pdf-domain = { path = "../md2pdf-domain" }
+md2pdf-paths = { path = "../md2pdf-paths" }
+md2pdf-typeset = { path = "../md2pdf-typeset" }
 serde_json = { workspace = true }
+# Already in the graph via typst, so declaring it directly costs no new crates. `clap`
+# would add ~10 to spare a 15-line help string for two commands and three flags.
+pico-args = "0.5"
+
+[dev-dependencies]
+md2pdf-paths = { path = "../md2pdf-paths" }

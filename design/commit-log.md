@@ -234,3 +234,36 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > of adding a network stack without making it impossible. `cargo-deny` would do it properly by
   > understanding the graph, and is not used because a gate that needs a network fetch to install is
   > not a gate that runs everywhere.
+
+## Phase 3d — the CLI adapter
+
+- `<pending>` **feat(cli): the md2pdf binary, with tracing that explains itself** (T25).
+
+  > `md2pdf <path> -o <dir>` — a file converts, a directory converts recursively. `pico-args`
+  > rather than `clap`: it is already in the graph via typst, so it costs no new crates, where
+  > `clap` would add ~10 to spare a 15-line help string.
+  >
+  > `--json` emits line-delimited events and **nothing else on stdout**, which makes the CLI the
+  > *proof* of INV-8 rather than a claim about it: a test runs the real binary and parses its stdout
+  > back into `Event` values, crossing the out-of-process boundary for the first time.
+  >
+  > Exit 0 / 1 / 2. Flagged documents exit **0** — INV-5 says flagged is not failed, and a script
+  > author could reasonably expect otherwise, so it is pinned by a test and stated in `--help`.
+  >
+  > **Found by running 146 real documents: the diagnostic was being thrown away.** `job.rs` sealed a
+  > Diagnostic, used it to decide whether a document was flagged, and discarded the contents — so a
+  > run reported "70 need your attention" and could explain two. Every escalation-ladder decision
+  > died at the boundary. INV-4 held inside the engine and broke on the way out.
+  >
+  > Fixed with `Event::DiagnosticSealed` (a name the event storm already had), carrying the complete
+  > set from both halves. `SourceConverted` now carries a *count* rather than half the truth, so
+  > there is one complete answer instead of two partial ones.
+  >
+  > Also: the 146-document run printed nothing for 31 minutes. Per-document tracing is now on by
+  > default (`-q` to suppress), and compromises are **described rather than counted** — "4 elements
+  > shrunk, 2 rotated, 1 CLIPPED" instead of "7 compromises". A number is not something a user can
+  > act on.
+  >
+  > `PathBroker::kind` was added so the CLI stops calling `Path::is_dir` itself (path access outside
+  > `md2pdf-paths`, INV-9), and so a path that does not exist is a **job that could not start**
+  > rather than a document that failed — a typo was reporting "1 document failed" and exiting 1.
