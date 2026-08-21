@@ -8,6 +8,23 @@ place, so a decision can be found without archaeology through twenty commit mess
 Missed on the first three commits after this file was created; those entries landed a commit late
 and are marked as such.
 
+Which means the hash is not knowable yet, and the entry goes in as `` `<pending>` ``. **Fill it in
+at the next staging**, before writing the new entry:
+
+```bash
+./scripts/commit-log.sh          # stale? (a pending entry whose commit already exists)
+./scripts/commit-log.sh --fix    # fill them in from git log
+```
+
+That second half was itself honour-system and failed silently seven times — T19, T20, T21, T23, T25,
+T26a and T27 all sat `<pending>` after being committed. Backfilled 2026-08-21. The script matches on
+the full subject line, because the task tag alone is ambiguous: "(T27)" named both the commit that
+planned the census and the one that built it.
+
+Deliberately **not** wired into `verify.sh`. A pending entry is *correct* between staging and
+committing, and the gap between your commit and the next staging is normal working state — gating on
+it would turn the build red for bookkeeping at the one moment it is expected.
+
 Newest last. Docs-only and plan commits are listed by subject alone; code commits carry their body.
 
 ---
@@ -143,7 +160,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
 
 ## Phase 3c2 — batch
 
-- `<pending>` **feat(paths): walk a SourceSet, recording its SourceRoot** (T19).
+- `0d98965` **feat(paths): walk a SourceSet, recording its SourceRoot** (T19).
 
   > `walk` collects `.md` and `.markdown` recursively, case-insensitively, and records the
   > SourceRoot on the `SourceSet` so `mirror::output_path` has one source of truth for where
@@ -163,7 +180,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > `mirror::output_path` needed no work: T17 built it taking the SourceRoot already.
 
-- `<pending>` **feat: pre-flight collision planning; seal the Diagnostic** (T20).
+- `bcb410f` **feat: pre-flight collision planning; seal the Diagnostic** (T20).
 
   > Collisions are resolved **before any Source is converted**. That is possible because of
   > INV-12: output mirrors the source tree, so Source→OutputPath is injective and every Collision
@@ -189,7 +206,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > that gains an integration test. Clippy has already compiled the graph, so the step is mostly
   > linking and serialising it costs little.
 
-- `<pending>` **feat(engine): convert a directory, mirroring the tree** (T21) — closes 3c2.
+- `2f84795` **feat(engine): convert a directory, mirroring the tree** (T21) — closes 3c2.
 
   > `ConvertBatch` walks a SourceRoot, plans every write up front, and converts. `on_collision` is
   > required with no default: `OverwriteAll` would destroy files nobody was asked about, and a
@@ -212,7 +229,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > 3c1's skeleton tests pass unchanged and are the regression suite for `ConvertSource`, which
   > keeps its own path rather than becoming a batch of one.
 
-- `<pending>` **feat: guard against network dependencies** (T23, G1).
+- `045f622` **feat: guard against network dependencies** (T23, G1).
 
   > `check-boundaries.sh` gains a fourth rule: no network-capable crate anywhere in the dependency
   > graph, and no `std::net` in source (INV-1).
@@ -237,7 +254,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
 
 ## Phase 3d — the CLI adapter
 
-- `<pending>` **feat(cli): the md2pdf binary, with tracing that explains itself** (T25).
+- `9060cf8` **feat(cli): the md2pdf binary, with tracing that explains itself** (T25).
 
   > `md2pdf <path> -o <dir>` — a file converts, a directory converts recursively. `pico-args`
   > rather than `clap`: it is already in the graph via typst, so it costs no new crates, where
@@ -268,7 +285,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `md2pdf-paths`, INV-9), and so a path that does not exist is a **job that could not start**
   > rather than a document that failed — a typo was reporting "1 document failed" and exiting 1.
 
-- `<pending>` **feat: tables reflow instead of clipping** (T26a).
+- `e227eba` **feat: tables reflow instead of clipping** (T26a).
 
   > Adds `Reduction::Reflow`, one rung before `Clip`. An `Element` may now carry an alternate body
   > that cannot overflow, and `emit` gives every table one: the same cells with
@@ -294,7 +311,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > Not applied to a table nested inside a blockquote, which is emitted into the parent's body and
   > is not separable — the same nested-atomics ceiling already recorded in `classify.rs`.
 
-- `<pending>` **test: a census of the ladder's decisions** (T27).
+- `ba6e60a` **test: a census of the ladder's decisions** (T27).
 
   > Makes `compromise-mechanism.md` §9 — *every ladder change re-measures the baseline* — a build
   > failure instead of a rule people must remember. It was honour-system, which is the failure mode
