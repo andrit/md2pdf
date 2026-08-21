@@ -134,14 +134,74 @@ picked from evidence that never touched it.
 different question, and unaffected. It stays untracked; **this does not resolve the standing
 gitignore/delete/commit decision**, and the two should not be folded together.
 
-### Triage before tuning — the step that must come first
+### Triage — done 2026-08-21, and it changed the task
 
-T25 is the first time md2pdf meets 146 real documents rather than fixtures, and real-world markdown
-is nastier than anything written to be tested. **Expect the corpus run to surface converter bugs.**
+The corpus ran. **146 documents, 22 seconds, 146 valid PDFs.** 70 were flagged:
 
-Tuning floors on top of broken rendering would bake the wrong numbers into the template, and they
-would look deliberate. So T26 starts by running the corpus, triaging what breaks, and fixing or
-recording it — *then* tunes.
+| Compromise | Count |
+|---|---|
+| Shrunk to floor | 163 |
+| Rotated | 84 |
+| **Clipped** | **25**, across 9 documents |
+| Unsupported construct | 2 |
+
+Twenty-five clipped elements means **content lost from real documents**. Triaged rather than
+tuned around, and the result is that floors are the wrong thing to change first.
+
+#### Every clipped element is a Table, and the cause is how we emit tables
+
+Correlating each `Clip` decision back to its Element:
+
+```
+design__bounded-contexts.md   Table  natural=1365pt  avail=730pt  ratio=0.53
+design__event-storm.md        Table  natural=1021pt  avail=730pt  ratio=0.71
+design__event-storm.md        Table  natural=1113pt  avail=730pt  ratio=0.66
+design__task-flow.md          Table  natural=1628pt  avail=730pt  ratio=0.45
+```
+
+A table needing **71%** of its natural width is being clipped. That is not a floor being too high —
+it is a table that **cannot reflow at all**.
+
+`emit` produces `#table(columns: N)`, which sizes columns to their content. Such a table has one
+possible width, so the only lever the ladder has is to shrink the whole thing, and when 7pt is not
+enough it clips. **GitHub does not do this** — it wraps cell text and the table always fits.
+
+Measured on one identical table:
+
+```
+columns: 5          natural = 1339pt   ->  Landscape + Clip   (content lost)
+columns: (1fr x 5)  natural =    0pt   ->  Portrait + None    (fits, no compromise)
+```
+
+#### What that implies, including the part that is not free
+
+With fractional columns a table **cannot overflow horizontally** — it fills the width available and
+cells wrap. That removes 25 clips and most of the 84 rotations outright.
+
+It also means `measure()` returns **0pt**, because `1fr` has no natural width. So the probe learns
+nothing about a table any more: tables stop being Atomic in the sense the spike established
+("natural width IS required width") and become effectively Wrappable. The escalation ladder would
+simply never run for them.
+
+That is a **product decision, not a repair**, and it is yours:
+
+| Option | Result |
+|---|---|
+| **A — keep `auto` columns** | Wide tables shrink, rotate, then lose content. Column widths follow content, which reads well when it fits. |
+| **B — always `1fr` columns** | Nothing is ever clipped. A 12-column table squeezes to ~40pt per column and wraps hard — ugly, never lossy. |
+| **C — `auto`, falling back to `1fr` when it will not fit** | Keeps content-shaped columns for tables that fit; reflows rather than clips for those that do not. More emit logic, and the fallback needs the probe's answer to reach the render pass. |
+
+C looks right — it is what a person would do by hand — but it is more work and it puts a
+measurement-dependent choice into emission. **Settle this before tuning floors**, because it decides
+what the floors even govern: under B, the table floor stops mattering almost entirely.
+
+#### A second gap the triage exposed
+
+`Compromise` carries an `ElementId` and a kind — not what the element *was*. Finding out that all 25
+clips were tables required writing a throwaway probe that re-converted each document and matched ids.
+
+An adapter cannot do that, so the attention gate in 3f cannot yet say *"the table on page 4"* — only
+*"element 37"*. Recorded here as input to 3f rather than fixed now.
 
 ### Division of labour, stated so "by eye" does not quietly become my eye
 
@@ -151,6 +211,8 @@ recording it — *then* tunes.
 - **You make the call.** Whether 7pt table text is readable or merely legible is an aesthetic
   judgment about the product, and the stack decisions deferred it to exactly this moment for that
   reason.
+
+### Then, and only then, the numbers
 
 ### Where the numbers live
 

@@ -73,7 +73,8 @@ Detail lives in the phase plans; this is the index.
 | T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ✅ staged |
 | T24 | Guard G2 — no UI deps — **unblocked: adapter is an in-workspace crate** | guards | ☐ |
 | T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
-| T26 | Triage the corpus run, then choose Floors | 3d | ☐ next |
+| T26a | **Table column strategy** — auto vs `1fr` vs fallback *(decision needed)* | 3d | ☐ next |
+| T26b | Floors chosen against the corpus, after T26a | 3d | ☐ |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a
