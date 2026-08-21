@@ -27,7 +27,14 @@ pub fn render_source(elements: &[Element], template: &Template, map: &DecisionMa
 
         // The two axes compose: reduce the body, then place it. Neither step needs to
         // know what the other chose, which is the point of splitting them.
-        let reduced = reduce(&el.body.to_string(), decision.reduction, template);
+        // Reflow swaps the body for the Element's always-fitting alternate rather than
+        // transforming what is there — the difference between a table that wraps and a
+        // table that has lost its right-hand columns.
+        let source = match (decision.reduction, &el.reflow) {
+            (Reduction::Reflow, Some(alternate)) => alternate.to_string(),
+            _ => el.body.to_string(),
+        };
+        let reduced = reduce(&source, decision.reduction, template);
         match decision.orientation {
             Orientation::Portrait => {
                 s.push_str(&format!("{reduced}\n#v(0.65em)\n"));
@@ -59,6 +66,8 @@ fn reduce(body: &str, reduction: Reduction, template: &Template) -> String {
             let factor = factor.clamp(0.05, 1.0);
             format!("#scale({:.2}%, reflow: true)[{body}]", factor * 100.0)
         }
+        // The alternate body already fits; nothing further is applied to it.
+        Reduction::Reflow => body.to_string(),
         Reduction::Clip => format!(
             "#block(width: 100%, clip: true)[{body}]\n\
              #text(size: {}pt, fill: red)[[clipped]]",

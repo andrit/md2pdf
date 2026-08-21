@@ -692,3 +692,101 @@ fn rotation_and_reduction_compose_in_the_output() {
         compilation.geometry()
     );
 }
+
+// ---- Reflow: the rung that replaced clipping for tables (T26a) ---------------
+
+#[test]
+fn a_table_too_wide_to_shrink_reflows_instead_of_clipping() {
+    // Before this rung existed, 25 elements across 9 real documents lost their
+    // right-hand columns. Every one was a table.
+    let cells: String = (0..6)
+        .map(|i| format!("[a reasonably long cell value number {i}]"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let el = Element::with_reflow(
+        0,
+        ElementClass::Table,
+        Markup::raw(format!("#table(columns: 6, {cells})")),
+        Markup::raw(format!(
+            "#table(columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr), {cells})"
+        )),
+    );
+
+    let map = probe(std::slice::from_ref(&el));
+    let d = map.get(&el.id).expect("decision");
+    assert_eq!(
+        d.reduction,
+        Reduction::Reflow,
+        "a table with an alternate form must never clip"
+    );
+}
+
+#[test]
+fn an_element_with_no_alternate_still_clips() {
+    // Images cannot reflow, so the last rung remains reachable for them.
+    let el = Element::new(
+        9,
+        ElementClass::Table,
+        Markup::raw(r#"#table(columns: 40, ..range(40).map(i => [verylongcell#i]))"#),
+    );
+    let map = probe(std::slice::from_ref(&el));
+    assert_eq!(map.get(&el.id).unwrap().reduction, Reduction::Clip);
+}
+
+#[test]
+fn reflow_renders_the_alternate_body_not_the_original() {
+    let el = Element::with_reflow(
+        0,
+        ElementClass::Table,
+        Markup::raw("#table(columns: 1, [ORIGINAL])"),
+        Markup::raw("#table(columns: (1fr), [ALTERNATE])"),
+    );
+    let map = DecisionMap {
+        decisions: vec![Decision {
+            id: el.id,
+            orientation: Orientation::Portrait,
+            reduction: Reduction::Reflow,
+            natural_pt: 999.0,
+            available_pt: 196.0,
+        }],
+    };
+    let text = Typesetter::new()
+        .render(std::slice::from_ref(&el), &template(), &map)
+        .expect("renders")
+        .text();
+
+    assert!(
+        text.contains("ALTERNATE"),
+        "the alternate was not used: {text:?}"
+    );
+    assert!(
+        !text.contains("ORIGINAL"),
+        "both bodies were rendered: {text:?}"
+    );
+}
+
+#[test]
+fn a_reflowed_table_keeps_all_of_its_content() {
+    // The point of the rung: nothing is lost.
+    let cells: String = (0..6)
+        .map(|i| format!("[CELL{i}]"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let el = Element::with_reflow(
+        0,
+        ElementClass::Table,
+        Markup::raw(format!("#table(columns: 6, {cells})")),
+        Markup::raw(format!(
+            "#table(columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr), {cells})"
+        )),
+    );
+    let map = probe(std::slice::from_ref(&el));
+    let text = Typesetter::new()
+        .render(std::slice::from_ref(&el), &template(), &map)
+        .expect("renders")
+        .text();
+
+    for i in 0..6 {
+        assert!(text.contains(&format!("CELL{i}")), "CELL{i} was lost");
+    }
+}

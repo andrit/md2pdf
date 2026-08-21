@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use md2pdf_domain::{Compromise, CompromiseKind, Element, Markup};
+use md2pdf_domain::{Compromise, CompromiseKind, Element, ElementClass, Markup};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Tag, TagEnd};
 
 use crate::escape::{escape, escape_string};
@@ -57,6 +57,7 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         }
         let mut em = Emitter {
             ctx,
+            table: None,
             footnotes: &footnotes,
             pending: Vec::new(),
             images: ImageManifest::new(),
@@ -82,7 +83,29 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         // the document. `harvest.rs:27` resolves probe metadata back to elements by
         // `order` alone, and a duplicate would silently bind a decision to the wrong
         // element. See the plan, §1.2.
-        let element = Element::new(order, block.class, Markup::raw(body));
+        // A table gets an alternate rendering with fractional columns, which fills the
+        // width available and wraps inside cells rather than sizing columns to content.
+        //
+        // Content-sized columns read better when they fit, and cannot reflow when they
+        // do not: the ladder's only lever is shrinking the whole table, and past the
+        // floor that meant clipping — losing the right-hand columns outright. Carrying
+        // both forms lets the probe choose, so a table never has to lose content.
+        //
+        // Only whole-table blocks qualify. A table nested inside a blockquote is emitted
+        // into that block's body and is not separable here — the same nested-atomics
+        // ceiling recorded in `classify.rs`.
+        let element = match em.table.take() {
+            Some((columns, cells)) if block.class == ElementClass::Table => {
+                let fr = vec!["1fr"; columns].join(", ");
+                Element::with_reflow(
+                    order,
+                    block.class,
+                    Markup::raw(body),
+                    Markup::raw(format!("#table(columns: ({fr}), {cells})")),
+                )
+            }
+            _ => Element::new(order, block.class, Markup::raw(body)),
+        };
         for kind in em.pending {
             out.compromises.push(Compromise {
                 id: element.id,
@@ -120,6 +143,7 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
         // rather than recursing, which is GFM's own behaviour for an unresolved ref.
         let mut em = Emitter {
             ctx,
+            table: None,
             footnotes: &HashMap::new(),
             pending: Vec::new(),
             images: ImageManifest::new(),
@@ -133,6 +157,9 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
 
 struct Emitter<'m> {
     ctx: &'m SourceContext<'m>,
+    /// Columns and cells of the table in this block, if it is one — so the block can
+    /// also be expressed in its always-fitting form.
+    table: Option<(usize, String)>,
     footnotes: &'m HashMap<String, String>,
     /// Compromises for the block being emitted; the Element id is attached once the
     /// body is known.
@@ -241,6 +268,8 @@ impl Emitter<'_> {
             Tag::Table(alignments) => {
                 let columns = alignments.len().max(1);
                 let cells = self.sequence(events, Some(end));
+                // Remember the pieces so `emit` can also build the reflow alternate.
+                self.table = Some((columns, cells.clone()));
                 format!("#table(columns: {columns}, {cells})\n\n")
             }
             // Header cells are bold, matching how GitHub renders them.

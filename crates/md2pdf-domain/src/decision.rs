@@ -42,8 +42,16 @@ pub enum Reduction {
     /// Applied with `reflow: true`: Typst's default scale is a visual transform and
     /// would leave the overflow exactly where it was.
     Scale { factor: f64 },
-    /// Over even at the Floor in landscape. Clipped, with a visible marker — the last
-    /// rung, and the only outcome that loses content.
+    /// Rendered in its alternate, always-fitting form — a table with fractional
+    /// columns, wrapping inside cells rather than sizing them to content.
+    ///
+    /// Sits immediately before [`Reduction::Clip`], and takes precedence: reflowing
+    /// changes how a table *looks*, clipping destroys what it *says*. Only Elements
+    /// carrying an `Element::reflow` alternate can reach this rung.
+    Reflow,
+    /// Over even at the Floor in landscape, with no alternate form available. Clipped,
+    /// with a visible marker — the last rung, and the only outcome that loses content.
+    /// Reachable now only for Elements that cannot reflow, such as images.
     Clip,
 }
 

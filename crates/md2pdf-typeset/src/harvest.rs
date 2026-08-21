@@ -46,6 +46,7 @@ pub fn harvest(doc: &PagedDocument, elements: &[Element]) -> Result<DecisionMap,
             "none" => Reduction::None,
             "shrink" => Reduction::Shrink { size_pt },
             "scale" => Reduction::Scale { factor },
+            "reflow" => Reduction::Reflow,
             "clip" => Reduction::Clip,
             other => {
                 return Err(TypesetError::Harvest(format!(

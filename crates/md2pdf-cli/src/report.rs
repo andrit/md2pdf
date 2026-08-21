@@ -140,6 +140,7 @@ fn describe(compromises: &[Compromise]) -> String {
     let mut shrunk = 0;
     let mut scaled = 0;
     let mut rotated = 0;
+    let mut reflowed = 0;
     let mut clipped = 0;
     let mut missing = 0;
     let mut skipped = 0;
@@ -150,6 +151,7 @@ fn describe(compromises: &[Compromise]) -> String {
             CompromiseKind::ShrunkToFloor { .. } => shrunk += 1,
             CompromiseKind::Scaled { .. } => scaled += 1,
             CompromiseKind::Rotated => rotated += 1,
+            CompromiseKind::Reflowed => reflowed += 1,
             CompromiseKind::Clipped => clipped += 1,
             CompromiseKind::ImageMissing => missing += 1,
             CompromiseKind::ImageSkipped => skipped += 1,
@@ -170,6 +172,7 @@ fn describe(compromises: &[Compromise]) -> String {
     push(shrunk, "element shrunk", "elements shrunk");
     push(scaled, "image scaled", "images scaled");
     push(rotated, "element rotated", "elements rotated");
+    push(reflowed, "table reflowed", "tables reflowed");
     push(clipped, "element CLIPPED", "elements CLIPPED");
     push(missing, "image missing", "images missing");
     push(skipped, "remote image skipped", "remote images skipped");

@@ -267,3 +267,29 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `PathBroker::kind` was added so the CLI stops calling `Path::is_dir` itself (path access outside
   > `md2pdf-paths`, INV-9), and so a path that does not exist is a **job that could not start**
   > rather than a document that failed — a typo was reporting "1 document failed" and exiting 1.
+
+- `<pending>` **feat: tables reflow instead of clipping** (T26a).
+
+  > Adds `Reduction::Reflow`, one rung before `Clip`. An `Element` may now carry an alternate body
+  > that cannot overflow, and `emit` gives every table one: the same cells with
+  > `columns: (1fr, ..)` instead of `columns: N`.
+  >
+  > **Why, from the corpus:** 25 elements across 9 real documents were being clipped, and every
+  > single one was a table — including one needing 71% of its natural width. `#table(columns: N)`
+  > sizes columns to content, so such a table has exactly one possible width and the ladder's only
+  > lever is shrinking the whole thing; past the floor that meant losing the right-hand columns.
+  > GitHub wraps cell text instead, and so do we now.
+  >
+  > Measured on the corpus: **25 clipped → 0 clipped, 25 reflowed.** Everything else unchanged —
+  > 163 shrunk, 84 rotated, 70 flagged — so the change touched only the elements that were losing
+  > content. Confirmed by eye on a real document: full-size readable text, wrapped cells, every
+  > column present.
+  >
+  > `Clip` stays reachable for Elements with no alternate — an image cannot reflow.
+  >
+  > Recorded as `CompromiseKind::Reflowed` even though the output is usually *better* than the
+  > original: it is still a departure from the authored shape, and INV-4 says every judgment call
+  > is reported.
+  >
+  > Not applied to a table nested inside a blockquote, which is emitted into the parent's body and
+  > is not separable — the same nested-atomics ceiling already recorded in `classify.rs`.

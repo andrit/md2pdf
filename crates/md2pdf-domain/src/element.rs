@@ -94,6 +94,18 @@ pub struct Element {
     /// Typed as [`Markup`] rather than `String` so that unescaped document text
     /// cannot arrive here without an explicit `Markup::raw` at the call site.
     pub body: Markup,
+    /// An alternate rendering that **cannot overflow horizontally**, for Elements that
+    /// can be expressed two ways.
+    ///
+    /// Only tables have one today: `#table(columns: 5)` sizes columns to their content
+    /// and so has exactly one possible width, while `columns: (1fr, ..)` fills the space
+    /// available and wraps inside cells. The first reads better when it fits; the second
+    /// always fits.
+    ///
+    /// Its existence is what lets the ladder reflow instead of clipping — losing a
+    /// table's right-hand columns is the one outcome that destroys content, and a table
+    /// never has to suffer it.
+    pub reflow: Option<Markup>,
 }
 
 impl Element {
@@ -102,6 +114,18 @@ impl Element {
             id: ElementId::new(order, body.as_str()),
             class,
             body,
+            reflow: None,
+        }
+    }
+
+    /// An Element that can also be rendered in a form that always fits.
+    ///
+    /// Identity still comes from `body` alone: it is the same Element either way, and a
+    /// persisted Override must not be invalidated by which rendering was chosen.
+    pub fn with_reflow(order: u32, class: ElementClass, body: Markup, reflow: Markup) -> Self {
+        Self {
+            reflow: Some(reflow),
+            ..Self::new(order, class, body)
         }
     }
 }

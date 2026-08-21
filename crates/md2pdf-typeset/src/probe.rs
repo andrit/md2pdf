@@ -120,6 +120,13 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
             // measurements per element per orientation, and it dominates probe cost.
             // A binary search would cut it to ~3 — noted in the findings, not taken.
             let floor = template.floors.for_class(el.class);
+            // The last rung. An Element with an alternate form reflows instead of
+            // losing content; only one with nothing to fall back on clips.
+            let last_rung = if el.reflow.is_some() {
+                "reflow"
+            } else {
+                "clip"
+            };
             write!(
                 s,
                 r#"  {{
@@ -152,7 +159,7 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
         reduction = "shrink"
         size = l.pt()
       }} else {{
-        reduction = "clip"
+        reduction = "{last_rung}"
       }}
     }}
     [#metadata((

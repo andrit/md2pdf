@@ -28,6 +28,12 @@ pub enum CompromiseKind {
         factor: f64,
     },
     Rotated,
+    /// A table was rendered with wrapping columns instead of content-sized ones.
+    ///
+    /// Recorded even though the result is usually *better* than the alternative: it is
+    /// still a departure from the authored shape, and `INV-4` says every judgment call
+    /// md2pdf makes on the user's behalf is reported.
+    Reflowed,
     Clipped,
     ImageSkipped,
     ImageMissing,
@@ -96,6 +102,7 @@ impl Diagnostic {
             let kind = match d.reduction {
                 Reduction::Shrink { size_pt } => Some(CompromiseKind::ShrunkToFloor { size_pt }),
                 Reduction::Scale { factor } => Some(CompromiseKind::Scaled { factor }),
+                Reduction::Reflow => Some(CompromiseKind::Reflowed),
                 Reduction::Clip => Some(CompromiseKind::Clipped),
                 Reduction::None => None,
             };
