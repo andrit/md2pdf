@@ -439,3 +439,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > **R5 gets sharper, not milder.** Rotation and clipping are both zero, and 152 of 198 compromised
   > elements now sit on one rung — so a defect in reflow is a defect nearly everywhere, and
   > `Reflowed` reads the same whether the table wrapped beautifully or ran off the page.
+- `<pending>` docs: add the flags register; plan T29 against measured token locations
