@@ -402,4 +402,40 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Widths are measured from the emitted markup rather than the rendered text; a `ponytail:` records
   > the ceiling. A link's URL inflates its column, which at worst grants a narrow column `1fr`.
-- `<pending>` docs: re-vet the ladder order against measured overflow exposure (T26b)
+- `b87e587` docs: re-vet the ladder order against measured overflow exposure (T26b)
+
+- `<pending>` **feat(typeset): reflow before shrinking small, and before rotating** (T26b).
+
+  > Closes **R2**. A table that would shrink below the comfort floor now wraps at full size instead,
+  > and wraps rather than taking a landscape page of its own (option O2a). One new `Floors` field, one
+  > branch in the probe's text-atomic path; the image branch is untouched.
+  >
+  > **Measured on 146 real documents: 163 shrunk → 46, 25 reflowed → 152, 84 rotated → 0**, 70 flagged
+  > either way, 146 valid PDFs. The 41 elements rendering at 7.0–7.5pt that started R2 are gone. The
+  > flagged count not moving is the correct result, not a disappointment — the same elements are
+  > compromised, just better — and it means **T26b does nothing for R1**.
+  >
+  > The simulation predicted 46 / 152 / 0 / 70 before any code was written, and the census diff was
+  > predicted line for line. Both matched exactly, including `shrink-slight.md` at exactly 9.0pt
+  > staying shrunk, which pins `>=` rather than `>`.
+  >
+  > **Sequenced deliberately after T26a2**, and that order was the whole difficulty. Reordering first
+  > — on R2's original reasoning, which was written before anything was rendered — would have moved
+  > 117 elements onto a rung whose alternate gave a "P1" column the same width as a paragraph. The
+  > census would have recorded that as progress.
+  >
+  > **Known cost, measured rather than hoped:** every table in the corpus was rendered reflowed and
+  > checked for ink past the margin. 3 elements newly overflow, joining 4 that already did — **T29**,
+  > next. A textual proxy would have put the exposure at 85 and shelved this change; only rendering
+  > gives 7.
+  >
+  > Two fixtures renamed because the change made their names untrue: `rotate.md` →
+  > `reflow-instead-of-rotate.md`, `shrink-floor.md` → `below-comfort-reflows.md`.
+  >
+  > Both goldens moved with reasons recorded: the ladder fixture shrank at 7.5pt and now reflows, and
+  > the reflow fixture now reflows in portrait rather than landscape. `golden_at` confirmed the rung
+  > held, which is the check that was missing when T26a2 landed silently.
+  >
+  > **R5 gets sharper, not milder.** Rotation and clipping are both zero, and 152 of 198 compromised
+  > elements now sit on one rung — so a defect in reflow is a defect nearly everywhere, and
+  > `Reflowed` reads the same whether the table wrapped beautifully or ran off the page.

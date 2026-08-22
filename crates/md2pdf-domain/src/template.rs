@@ -11,6 +11,23 @@ pub struct Floors {
     pub prose_pt: f64,
     pub table_pt: f64,
     pub code_pt: f64,
+    /// The size below which wrapping reads better than shrinking further.
+    ///
+    /// A **second** floor on the same class, answering a different question from
+    /// [`Floors::table_pt`]:
+    ///
+    /// | Floor | Question |
+    /// |---|---|
+    /// | `table_pt` | how small before we give up entirely |
+    /// | `table_comfort_pt` | how small before wrapping is *nicer* |
+    ///
+    /// Above it a squeeze is imperceptible and the author's column proportions are worth
+    /// keeping; below it the same table reads better at full size with its cells
+    /// wrapping. Applies only to Elements that carry an alternate — a table.
+    ///
+    /// 9.0pt is a starting point, chosen to be tuned by eye against real pages (T26c),
+    /// not derived. See `design/plan-ladder-order.md`.
+    pub table_comfort_pt: f64,
     /// Smallest scale an image may be reduced to before rotating instead (0..1).
     ///
     /// Not a point size — images shrink by scale factor. Without a floor here shrink
@@ -26,6 +43,7 @@ impl Default for Floors {
             prose_pt: 9.0,
             table_pt: 7.0,
             code_pt: 7.0,
+            table_comfort_pt: 9.0,
             image_scale: 0.25,
         }
     }

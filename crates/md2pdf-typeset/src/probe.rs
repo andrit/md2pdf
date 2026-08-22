@@ -127,6 +127,26 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
             } else {
                 "clip"
             };
+            // An Element that can wrap prefers wrapping to being squeezed small, and
+            // prefers it to a landscape page of its own (T26b, option O2a).
+            //
+            // The comfort floor is where that preference turns over: above it the
+            // squeeze is imperceptible and the author's column proportions are worth
+            // keeping; below it the table reads better at full size with its cells
+            // wrapping. Rendered side by side before choosing — `design/evidence/t26a2/`.
+            //
+            // Rotation becomes an image-only rung as a result: every table in the corpus
+            // that rotated could wrap instead, and wrapping costs no page turn.
+            //
+            // An Element with no alternate keeps the original ladder exactly: a comfort
+            // floor of zero makes the test `p >= 0pt` vacuous, so it reduces to
+            // "shrink if anything fits".
+            let has_alternate = el.reflow.is_some();
+            let comfort = if has_alternate {
+                template.floors.table_comfort_pt
+            } else {
+                0.0
+            };
             write!(
                 s,
                 r#"  {{
@@ -147,9 +167,11 @@ pub fn probe_source(elements: &[Element], template: &Template) -> String {
     let available = {avail}
     let p = choose({avail}pt)
     if p == {base}pt {{
-    }} else if p != none {{
+    }} else if p != none and p >= {comfort}pt {{
       reduction = "shrink"
       size = p.pt()
+    }} else if {has_alternate} {{
+      reduction = "reflow"
     }} else {{
       orientation = "landscape"
       available = {land}

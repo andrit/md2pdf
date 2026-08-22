@@ -140,8 +140,12 @@ fn the_same_document_twice_is_byte_identical() {
     assert_eq!(golden(md), golden(md));
 }
 
-/// A rotated, scaled and clipped document also renders deterministically — the
-/// escalation ladder must not introduce nondeterminism of its own.
+/// The ladder renders deterministically — it must not introduce nondeterminism of its
+/// own, whichever rung it picks.
+///
+/// This table shrank to 7.5pt until T26b, and now reflows: below the comfort floor a
+/// table wraps rather than being squeezed. The determinism check is the point here, so
+/// the fixture is kept as-is rather than re-tuned to hold its old rung.
 #[test]
 fn the_escalation_ladder_is_unchanged() {
     let md = "| a | b | c | d | e | f | g | h |\n|---|---|---|---|---|---|---|---|\n\
@@ -149,7 +153,7 @@ fn the_escalation_ladder_is_unchanged() {
               | verylongvalue5 | verylongvalue6 | verylongvalue7 | verylongvalue8 |\n";
     let first = golden(md);
     assert_eq!(first, golden(md), "the ladder is not deterministic");
-    assert_eq!(first, "910368d04bc4d1b0/13525");
+    assert_eq!(first, "e8e8d3fcc3000d03/13511");
 }
 
 /// The reflow rung, which no golden covered until 2026-08-22.
@@ -166,5 +170,5 @@ fn a_reflowed_table_is_unchanged() {
         "| Column 0 | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |\n\
          |---|---|---|---|---|---|\n{row}{row}"
     );
-    assert_eq!(golden_at(&md, Reduction::Reflow), "57c0b72fcaddf289/12311");
+    assert_eq!(golden_at(&md, Reduction::Reflow), "71c16408be006309/12287");
 }

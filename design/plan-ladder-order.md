@@ -488,3 +488,30 @@ is usually the header or an early one. Worth knowing the number is a floor, not 
 
 `image-clipped.md` and `image-scaled.md` both decide Landscape **[measured]**, so the rung stays
 covered and `the_census_covers_every_compromise_kind` stays honest.
+
+---
+
+## Built — 2026-08-22 · O2a, 9.0pt comfort floor
+
+**The simulation was exact.** Predicted 46 shrunk / 152 reflowed / 0 rotated / 70 flagged; measured
+on 146 real documents in release: **46 / 152 / 0 / 70**, 146 valid PDFs, 25.7s. D1 is now verified
+empirically rather than argued.
+
+The census diff matched its prediction line for line, including `shrink-slight.md` at exactly 9.0pt
+staying shrunk — the fixture that pins `>=` rather than `>`.
+
+**Two fixtures were renamed, because the change made their names untrue:** `rotate.md` →
+`reflow-instead-of-rotate.md`, and `shrink-floor.md` → `below-comfort-reflows.md`. The second is the
+sharper record: a table can no longer reach the 7pt floor at all if it has an alternate, since
+anything below 9pt wraps instead.
+
+**A quiet consequence worth stating:** `Floors::table_pt` (7pt) now has **no observable effect** on
+any table that carries an alternate — every result below the comfort floor becomes a reflow before
+the hard floor is ever consulted. It still governs the clip marker and any atomic text without an
+alternate. Not dead, but much narrower than it looks. T26c should decide whether it stays.
+
+**Both goldens moved, both for stated reasons.** `the_escalation_ladder_is_unchanged` shrank at
+7.5pt and now reflows — its doc comment was corrected rather than left describing behaviour it no
+longer has. `a_reflowed_table_is_unchanged` moved because reflow now happens in **portrait** instead
+of landscape; `golden_at` confirmed the rung is still Reflow, which is exactly the check that was
+missing when T26a2 landed silently.

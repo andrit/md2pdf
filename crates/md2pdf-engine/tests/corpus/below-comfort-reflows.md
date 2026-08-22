@@ -1,7 +1,7 @@
-# Shrink to the floor
+# Below the comfort floor
 
-Measured to land exactly on the 7pt floor — the deepest rung
-before rotation. A comfort floor above 7pt should move this fixture.
+Would shrink to 7pt, which is past the point where wrapping reads
+better. Sized so a comfort floor above 7pt moves it — the fixture that pins that turnover.
 
 | Column 0 | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |
 |---|---|---|---|---|---|

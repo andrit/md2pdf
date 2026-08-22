@@ -35,6 +35,7 @@ fn template() -> Template {
             prose_pt: 9.0,
             table_pt: 7.0,
             code_pt: 7.0,
+            table_comfort_pt: 9.0,
             image_scale: 0.25,
         },
         font_body: "Source Sans 3".into(),

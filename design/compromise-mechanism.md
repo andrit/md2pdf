@@ -62,14 +62,14 @@ Two independent axes (T14), not four steps:
 Decided entirely in the ProbePass, because the RenderPass never measures:
 
 ```
-wrappable                        -> Portrait, None
-fits portrait                    -> Portrait, None
-reduces within floor, portrait   -> Portrait, Shrink | Scale
-otherwise re-measure in landscape:
-    fits at base                 -> Landscape, None
-    reduces within floor there   -> Landscape, Shrink | Scale
-    has an alternate form        -> Reflow          (tables)
-    otherwise                    -> Clip            (images)
+wrappable                          -> Portrait, None
+fits portrait                      -> Portrait, None
+shrinks, and stays >= comfort      -> Portrait, Shrink | Scale
+has an alternate form              -> Portrait, Reflow      (tables — T26b)
+otherwise re-measure in landscape:                          (images only, in practice)
+    fits at base                   -> Landscape, None
+    reduces within floor there     -> Landscape, Shrink | Scale
+    otherwise                      -> Clip
 ```
 
 ## 5 · How we got here
@@ -84,9 +84,32 @@ otherwise re-measure in landscape:
 | T14 | `Clip` made reachable | it was unreachable code — elements too wide for landscape overflowed silently |
 | T26a | `Reflow` added before `Clip` | 25 elements across 9 real documents were losing columns, and every one was a table |
 
-## 6 · Baseline — 146 real documents, 2026-08-21
+## 6 · Baseline — 146 real documents, 2026-08-22
 
-Release build, `documents/`, `Template::default()` (10pt base, 9/7/7pt floors, 0.25 image scale).
+Release build, `documents/`, `Template::default()` (10pt base, 9/7/7pt floors, **9pt table comfort
+floor**, 0.25 image scale). Re-measured after T26b, as §9 requires.
+
+```
+146 converted, 146 valid PDFs, 25.7s
+ 70 flagged (48%)
+
+ 152  reflowed          (was 25)
+  46  shrunk to floor   (was 163)
+   0  rotated           (was 84)
+   2  unsupported construct
+   0  clipped
+```
+
+**Shrink targets** now sit at 9.0pt × 27 and 9.5pt × 19 — every deeper squeeze became a reflow, which
+is what the comfort floor is for. **[measured]** this matches the simulation in
+`plan-ladder-order.md` exactly, on every count.
+
+**Rotation is zero and that is load-bearing to notice** — see R5. Tables no longer rotate at all, so
+the rung survives only for images, none of which reach the ladder in this corpus.
+
+### The previous baseline, 2026-08-21 — before T26b
+
+Kept so the movement is visible rather than asserted.
 
 ```
 146 converted, 146 valid PDFs, 26.8s
@@ -141,16 +164,25 @@ that the gate fires *where a decision was made* becomes technically true and pra
 
 **Watch:** the flagged percentage. **It should fall as the ladder improves, not rise.**
 
-### R2 · The order of the rungs is an assumption nobody has tested · **RE-SCOPED 2026-08-22 — the premise was wrong**
+### R2 · The order of the rungs · **CLOSED 2026-08-22 by T26b**
 
 > **Rendered and looked at (`design/plan-ladder-order.md`, evidence section).** Deep shrinking beats
 > the current reflow on every real table tried. The founding comparison used a *synthetic* table
 > whose columns were all the same width — the one shape for which `columns: (1fr, …)` is right.
 >
+> **Closed.** It took two commits, in this order, because the first attempt got the diagnosis wrong.
+>
 > The defect was in the **alternate**, not the order: equal `1fr` shares gave a "P1" column the same
-> width as a prose column. **Fixed in T26a2** — narrow columns size to content, wide ones share the
-> slack. Re-rendered and looked at afterwards, **reflow now beats deep shrinking**, so R2's
-> conclusion stands and T26b is live again.
+> width as a prose column, which is why reflow *looked* worse than deep shrinking. **T26a2** fixed
+> that — narrow columns size to content, wide ones share the slack. Only then did T26b reorder the
+> rungs, with a 9pt comfort floor.
+>
+> **Result, measured:** 163 shrinks → 46, 25 reflows → 152, 84 rotations → 0. The 41 elements at
+> 7.0–7.5pt that started this risk are gone.
+>
+> **The lesson worth keeping** is the sequencing. Reordering first, on this risk's original
+> reasoning, would have moved 117 elements onto a rung that rendered them badly — and the census
+> would have recorded it as progress.
 >
 > **The alternate still does not always fit.** With unbreakable content — 261 real table cells hold a
 > 30+ character token — it overflows the page *and* the cells overprint each other, while the ladder
@@ -211,7 +243,7 @@ An adapter cannot do that. So the attention gate in 3f can say *"element 37 was 
 *"the table on page 4"*, which is the thing a user can act on. `page` is `Option<u32>` and is always
 `None`, because sealing happens before pagination.
 
-### R5 · Reflow removed a symptom; confirm it did not remove the signal · **WATCH**
+### R5 · Reflow removed a symptom; confirm it did not remove the signal · **SHARPER after T26b**
 
 Clipping was the loudest thing the ladder could report, and it is now zero. That is a genuine
 improvement — content is no longer destroyed — but it also means **the ladder's alarm no longer
@@ -220,6 +252,14 @@ beautifully.
 
 **Watch:** if a future change makes output worse, would anything catch it? Golden hashes would catch
 *a change*; nothing yet judges *quality*.
+
+**T26b makes this sharper, not milder.** Rotation is now **zero** and clipping is zero, so two of the
+ladder's three loud signals are silent, and **152 of 198 compromised elements sit on a single rung**.
+Reflow is now where almost everything lands, which means a defect in reflow is a defect nearly
+everywhere — and `Reflowed` is reported identically whether the table wrapped beautifully or ran off
+the page (**T29**, which happens to 4 elements today).
+
+The fixture census is now the only place `rotated` is observed at all, via the image fixtures.
 
 ---
 

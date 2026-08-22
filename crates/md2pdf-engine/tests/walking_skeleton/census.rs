@@ -125,7 +125,7 @@ fn generate() -> String {
         };
 
         out.push_str(&format!(
-            "{:<22} {:>2} elements   {summary}\n",
+            "{:<28} {:>2} elements   {summary}\n",
             source.file_name().unwrap().to_string_lossy(),
             conversion.elements.len(),
         ));
