@@ -28,7 +28,7 @@
 //! going red is the signal that it landed.
 
 use md2pdf_convert::{convert, SourceContext};
-use md2pdf_domain::{fnv1a, Template};
+use md2pdf_domain::{fnv1a, ElementClass, Reduction, Template};
 use md2pdf_typeset::Typesetter;
 
 /// Convert, compile, and digest the resulting PDF.
@@ -50,6 +50,40 @@ fn golden(markdown: &str) -> String {
         .pdf()
         .expect("pdf");
 
+    format!("{:016x}/{}", fnv1a(&pdf), pdf.len())
+}
+
+/// The same, but assert which rung the ladder chose before hashing.
+///
+/// A golden hash cannot tell you *what* it is covering. `the_escalation_ladder_is_unchanged`
+/// was assumed to cover reflow and does not — its table shrinks to 7.5pt and the alternate
+/// is never rendered, which is why changing the alternate's column spec left every golden
+/// green. Asserting the rung means the fixture cannot silently stop covering it.
+fn golden_at(markdown: &str, expected: Reduction) -> String {
+    let conversion = convert(markdown, &SourceContext::none());
+    let template = Template::default();
+    let typesetter = Typesetter::new();
+
+    let (decisions, _) = typesetter
+        .probe(&conversion.elements, &template)
+        .expect("probe");
+    let chosen = conversion
+        .elements
+        .iter()
+        .find(|e| e.class == ElementClass::Table)
+        .and_then(|e| decisions.get(&e.id))
+        .map(|d| d.reduction)
+        .expect("no table in the fixture");
+    assert_eq!(
+        chosen, expected,
+        "this fixture no longer exercises the rung it was written for"
+    );
+
+    let pdf = typesetter
+        .render(&conversion.elements, &template, &decisions)
+        .expect("render")
+        .pdf()
+        .expect("pdf");
     format!("{:016x}/{}", fnv1a(&pdf), pdf.len())
 }
 
@@ -116,4 +150,21 @@ fn the_escalation_ladder_is_unchanged() {
     let first = golden(md);
     assert_eq!(first, golden(md), "the ladder is not deterministic");
     assert_eq!(first, "910368d04bc4d1b0/13525");
+}
+
+/// The reflow rung, which no golden covered until 2026-08-22.
+///
+/// This is the fixture that moves when the alternate's column spec changes — the whole
+/// point of T26a2 — so it is the one that would have caught that change silently landing.
+#[test]
+fn a_reflowed_table_is_unchanged() {
+    // Six columns of 60 characters: too wide for landscape even at the 7pt floor, so the
+    // ladder falls to its last rung before clipping.
+    let cell = "x".repeat(60);
+    let row = format!("| {} |\n", [cell.as_str(); 6].join(" | "));
+    let md = format!(
+        "| Column 0 | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |\n\
+         |---|---|---|---|---|---|\n{row}{row}"
+    );
+    assert_eq!(golden_at(&md, Reduction::Reflow), "57c0b72fcaddf289/12311");
 }

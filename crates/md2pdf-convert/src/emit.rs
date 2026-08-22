@@ -58,6 +58,8 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         let mut em = Emitter {
             ctx,
             table: None,
+            cell_widths: Vec::new(),
+            cell_index: 0,
             footnotes: &footnotes,
             pending: Vec::new(),
             images: ImageManifest::new(),
@@ -83,8 +85,9 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         // the document. `harvest.rs:27` resolves probe metadata back to elements by
         // `order` alone, and a duplicate would silently bind a decision to the wrong
         // element. See the plan, §1.2.
-        // A table gets an alternate rendering with fractional columns, which fills the
-        // width available and wraps inside cells rather than sizing columns to content.
+        // A table gets an alternate rendering whose wide columns share the leftover
+        // width, so it fills the space available and wraps inside the cells that hold
+        // prose rather than sizing every column to its content.
         //
         // Content-sized columns read better when they fit, and cannot reflow when they
         // do not: the ladder's only lever is shrinking the whole table, and past the
@@ -96,12 +99,12 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         // ceiling recorded in `classify.rs`.
         let element = match em.table.take() {
             Some((columns, cells)) if block.class == ElementClass::Table => {
-                let fr = vec!["1fr"; columns].join(", ");
+                let spec = column_spec(columns, &em.cell_widths);
                 Element::with_reflow(
                     order,
                     block.class,
                     Markup::raw(body),
-                    Markup::raw(format!("#table(columns: ({fr}), {cells})")),
+                    Markup::raw(format!("#table(columns: ({spec}), {cells})")),
                 )
             }
             _ => Element::new(order, block.class, Markup::raw(body)),
@@ -144,6 +147,8 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
         let mut em = Emitter {
             ctx,
             table: None,
+            cell_widths: Vec::new(),
+            cell_index: 0,
             footnotes: &HashMap::new(),
             pending: Vec::new(),
             images: ImageManifest::new(),
@@ -155,11 +160,51 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
     map
 }
 
+/// A column shares the leftover width when it is at least this fraction as wide as the
+/// widest column in the same table. Relative rather than absolute, because the corpus
+/// offers no natural cut: per-column max cell length runs p10 = 8, p50 = 29, p90 = 84
+/// characters across 1215 columns, a smooth spread. See `design/plan-reflow-columns.md`.
+const SLACK_SHARE: (usize, usize) = (1, 2);
+
+/// Build the reflow alternate's column spec: `auto` for columns that size to their
+/// content, `1fr` for the ones that absorb what is left.
+///
+/// Equal `1fr` everywhere — what this replaced — gives a column holding "P1" the same
+/// width as one holding a paragraph, which is why deep shrinking beat reflow on every
+/// table the comparison sheets rendered.
+///
+/// The widest column always qualifies, so at least one column always absorbs the slack
+/// and the alternate never collapses into the content-sized body it exists to replace.
+fn column_spec(columns: usize, widths: &[usize]) -> String {
+    let widest = widths.iter().copied().max().unwrap_or(0);
+    (0..columns)
+        .map(|i| {
+            let w = widths.get(i).copied().unwrap_or(0);
+            // `w / widest >= 1/2`, without floating point or division by zero.
+            if widest == 0 || w * SLACK_SHARE.1 >= widest * SLACK_SHARE.0 {
+                "1fr"
+            } else {
+                "auto"
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 struct Emitter<'m> {
     ctx: &'m SourceContext<'m>,
     /// Columns and cells of the table in this block, if it is one — so the block can
     /// also be expressed in its always-fitting form.
     table: Option<(usize, String)>,
+    /// Longest cell in each column of that table, which decides who absorbs the slack.
+    ///
+    /// ponytail: measures the emitted markup, not the rendered text. A header's
+    /// `#strong[..]` wrapper is constant per column and cancels out; a cell holding a
+    /// link carries its URL and reads wider than it draws. ceiling: a narrow column that
+    /// contains a long link is granted `1fr`, which costs it nothing. upgrade: count
+    /// `Event::Text` while inside the cell.
+    cell_widths: Vec<usize>,
+    cell_index: usize,
     footnotes: &'m HashMap<String, String>,
     /// Compromises for the block being emitted; the Element id is attached once the
     /// body is known.
@@ -267,6 +312,10 @@ impl Emitter<'_> {
             Tag::Item => format!("[{}]", self.sequence(events, Some(end)).trim()),
             Tag::Table(alignments) => {
                 let columns = alignments.len().max(1);
+                // Reset before the cells arrive: one table's widths must not leak into
+                // the next, and a document may hold many.
+                self.cell_widths = vec![0; columns];
+                self.cell_index = 0;
                 let cells = self.sequence(events, Some(end));
                 // Remember the pieces so `emit` can also build the reflow alternate.
                 self.table = Some((columns, cells.clone()));
@@ -283,6 +332,12 @@ impl Emitter<'_> {
             Tag::TableCell => {
                 let inner = self.sequence(events, Some(end));
                 let inner = inner.trim();
+                // Row-major, so the column is the position within the row.
+                if !self.cell_widths.is_empty() {
+                    let col = self.cell_index % self.cell_widths.len();
+                    self.cell_widths[col] = self.cell_widths[col].max(inner.chars().count());
+                    self.cell_index += 1;
+                }
                 if self.in_header {
                     format!("[#strong[{inner}]], ")
                 } else {
@@ -511,6 +566,91 @@ mod tests {
         assert!(b.starts_with("#table(columns: 2,"), "wrong columns: {b}");
         assert!(b.contains("[#strong[a]]"), "header not bold: {b}");
         assert!(b.contains("[1]"), "body cell missing: {b}");
+    }
+
+    /// The alternate the ladder falls back to, when a table will not fit.
+    fn alternate(md: &str) -> String {
+        run(md)
+            .elements
+            .iter()
+            .find_map(|e| e.reflow.as_ref().map(|m| m.as_str().to_string()))
+            .expect("the table carried no reflow alternate")
+    }
+
+    #[test]
+    fn narrow_columns_size_to_content_and_wide_ones_share_the_slack() {
+        // "P1" must not be given the same width as a paragraph — the defect that made
+        // deep shrinking beat reflow on every real table. See plan-reflow-columns.md.
+        let a = alternate(
+            "| id | note | p |\n|---|---|---|\n\
+             | E01 | a considerably longer sentence that has to wrap somewhere | P1 |",
+        );
+        assert!(
+            a.starts_with("#table(columns: (auto, 1fr, auto),"),
+            "wrong column spec: {a}"
+        );
+    }
+
+    #[test]
+    fn two_wide_columns_both_share_the_slack() {
+        // The rule is relative, so "widest column only" is not enough: a table with two
+        // prose columns needs both to absorb, or the second sizes to its full content.
+        let a = alternate(
+            "| id | first | second |\n|---|---|---|\n\
+             | E1 | a reasonably long sentence here | another reasonably long one too |",
+        );
+        assert!(
+            a.starts_with("#table(columns: (auto, 1fr, 1fr),"),
+            "wrong column spec: {a}"
+        );
+    }
+
+    #[test]
+    fn a_uniform_table_gives_every_column_a_share() {
+        // Where every column is the same width the old behaviour is the right one, and
+        // the alternate must still fill the width rather than collapsing to the body.
+        let a = alternate("| aaa | bbb |\n|---|---|\n| ccc | ddd |");
+        assert!(
+            a.starts_with("#table(columns: (1fr, 1fr),"),
+            "wrong column spec: {a}"
+        );
+    }
+
+    #[test]
+    fn at_least_one_column_always_absorbs_the_slack() {
+        // Otherwise the alternate is an all-`auto` table — which is the body it exists
+        // to replace, and would silently stop reflowing anything.
+        for md in [
+            "| a |\n|---|\n| b |",
+            "| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |",
+            "| tiny | enormously long cell content goes here |\n|---|---|\n| x | y |",
+        ] {
+            let a = alternate(md);
+            assert!(a.contains("1fr"), "no column absorbs the slack: {a}");
+        }
+    }
+
+    #[test]
+    fn each_table_is_measured_on_its_own() {
+        // The widths are per-table state; a wide table must not set the scale for the
+        // narrow one that follows it.
+        let out = run(
+            "| id | note |\n|---|---|\n| E01 | a considerably longer sentence to wrap |\n\n\
+             | aa | bb |\n|---|---|\n| cc | dd |",
+        );
+        let specs: Vec<String> = out
+            .elements
+            .iter()
+            .filter_map(|e| e.reflow.as_ref())
+            // Just the column spec, not the cells.
+            .map(|m| m.as_str().split("), ").next().unwrap_or("").to_string())
+            .collect();
+        assert_eq!(specs.len(), 2, "expected two tables: {specs:?}");
+        assert!(specs[0].contains("auto"), "first table: {specs:?}");
+        assert!(
+            !specs[1].contains("auto"),
+            "second table inherited the first's widths: {specs:?}"
+        );
     }
 
     #[test]

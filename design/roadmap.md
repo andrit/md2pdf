@@ -77,8 +77,9 @@ Detail lives in the phase plans; this is the index.
 | T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
 | T26a | Tables reflow instead of clipping (option C) | 3d | ✅ staged |
 | T27 | **Ladder census** — committed fixture corpus + decision baseline *(the tripwire)* | 3d | ✅ staged |
-| T26a2 | **Proportional reflow alternate** — `auto` for narrow columns, `1fr` for the widest *(blocks T26b)* | 3d | ☐ **next** |
-| T26b | **Ladder order** — reflow before deep shrink? *(R2)* | 3d | ⏸ **parked** — evidence says the alternate is the defect, not the order |
+| T26a2 | **Proportional reflow alternate** — `auto` for narrow columns, `1fr` for the widest | 3d | ✅ staged |
+| T26b | **Ladder order** — reflow before deep shrink? *(R2)* | 3d | ☐ **next, unparked** — reflow now beats deep shrink, confirmed by eye |
+| T29 | **Unbreakable cell content overflows the page** — 261 real cells hold a 30+ char token | 3d | ☐ |
 | T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ |
 | T26c | Floors chosen against the corpus, after the order is settled | 3d | ☐ |
 

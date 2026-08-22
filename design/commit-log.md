@@ -361,4 +361,44 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > altered.
 - `2acd04e` docs: backfill commit-log hashes; script the half that was honour-system
 - `bc1aee7` docs: render the T26b comparison sheets; withdraw the reordering recommendation
-- `<pending>` docs: record class C — when the rendered page overrules the plan
+- `b59efac` docs: record class C — when the rendered page overrules the plan
+
+- `<pending>` **feat(convert): a reflow alternate worth choosing** (T26a2).
+
+  > The alternate emitted `columns: (1fr, ...)` — equal shares — so a column holding "P1" was given
+  > the same width as a column holding a paragraph. That is why the T26b comparison sheets found deep
+  > shrinking beating reflow on every real table: not the ladder's order, the alternate itself.
+  >
+  > Now a column shares the leftover width when it is at least half as wide as the widest column in
+  > the same table, and sizes to its content otherwise. **Relative, not absolute** — the corpus offers
+  > no natural cut to pick: per-column max cell length runs p10 = 8, p50 = 29, p90 = 84 characters
+  > across 1215 columns in 434 tables, a smooth spread. The widest column always qualifies, so at
+  > least one always absorbs and the alternate never collapses into the content-sized body it exists
+  > to replace.
+  >
+  > Vetted before building, because "does a mixed `auto`/`1fr` table still fit" is a fact about Typst:
+  > three table shapes × four specs, rendered, with ink past the right margin detected in the raster.
+  > The rule fits everywhere the old one fits. Two things fell out of that experiment. **`1fr`
+  > measures as 0.0pt in infinite space** — fractional columns collapse when unconstrained, so the
+  > probe *cannot* measure the alternate, which is why nothing guards this rung. And **the "always
+  > fits" guarantee was already false**: with unbreakable content, all-`1fr` overflows the page and
+  > the cells overprint into mush while the ladder reports `Reflowed`. 261 real table cells hold a
+  > 30+ character token — URLs and absolute paths. Unchanged by this commit, raised as **T29**, and
+  > the risk register no longer implies the rung is sound.
+  >
+  > **Looked at, which is the point of the task.** Today's 7pt shrink beside the new reflow of the
+  > same table: 10pt, one line per row but for one. And the rotation pair that killed O2a now reads
+  > well in portrait with no page turn. **Reflow now beats deep shrinking** — R2's original claim,
+  > right conclusion for the wrong reason. T26b is unparked.
+  >
+  > **A prediction that was wrong, and worth more than the ones that were right.** The plan said
+  > `the_escalation_ladder_is_unchanged` would move. No golden moved: that fixture shrinks to 7.5pt
+  > and never reaches Reflow, so **no golden covered the reflowed rendering at all** — this change
+  > could have landed silently while being entirely about how a reflowed table looks. Closed by
+  > `a_reflowed_table_is_unchanged` and by `golden_at`, which asserts which rung was chosen before
+  > hashing. A golden cannot otherwise say what it covers.
+  >
+  > The census is unchanged, as predicted — no rung moved, so the improvement stayed inside the rung.
+  >
+  > Widths are measured from the emitted markup rather than the rendered text; a `ponytail:` records
+  > the ceiling. A link's URL inflates its column, which at worst grants a narrow column `1fr`.

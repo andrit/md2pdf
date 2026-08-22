@@ -147,9 +147,14 @@ that the gate fires *where a decision was made* becomes technically true and pra
 > the current reflow on every real table tried. The founding comparison used a *synthetic* table
 > whose columns were all the same width — the one shape for which `columns: (1fr, …)` is right.
 >
-> The defect is in the **alternate**, not the order: equal `1fr` shares give a "P1" column the same
-> width as a prose column. **T26a2** fixes that (`auto` for narrow columns, `1fr` for the widest);
-> the ordering question is parked until there is an alternate worth preferring.
+> The defect was in the **alternate**, not the order: equal `1fr` shares gave a "P1" column the same
+> width as a prose column. **Fixed in T26a2** — narrow columns size to content, wide ones share the
+> slack. Re-rendered and looked at afterwards, **reflow now beats deep shrinking**, so R2's
+> conclusion stands and T26b is live again.
+>
+> **The alternate still does not always fit.** With unbreakable content — 261 real table cells hold a
+> 30+ character token — it overflows the page *and* the cells overprint each other, while the ladder
+> records `Reflowed`. That was true before T26a2 and is unchanged by it. **T29.**
 >
 > The text below is kept as written, because it is the reasoning that was acted on and the record of
 > how a defensible-looking inference went wrong.
