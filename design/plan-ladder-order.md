@@ -197,6 +197,11 @@ so `documents/` stays untracked and optional.
 
 ## Evidence — rendered and looked at, 2026-08-22
 
+> **Superseded by T26a2, later the same day.** The withdrawal below was correct about the *alternate*
+> and wrong to conclude anything about the *order*: once the alternate emitted proportional columns,
+> reflow beat deep shrinking on the same tables. Kept in full, because the reasoning is the record.
+> **Read the re-vetting at the end of this document for what is actually being decided.**
+
 **The recommendation above is withdrawn.** Not adjusted — withdrawn. The sheets say the premise
 under it is wrong, and the reason is not the one this plan was arguing about.
 
@@ -336,3 +341,150 @@ would be exercised only by the fixture corpus.
 
 That is not an argument against the change; it is a note that the fixture census becomes the *only*
 place rotation is observed, which is an argument for the fixture corpus existing at all.
+
+---
+
+# Re-vetted — 2026-08-22, after T26a2
+
+**Status: planned and vetted. One gate before building, stated at the end.**
+
+T26a2 gave the alternate proportional columns, and the comparison re-rendered afterwards reverses
+the withdrawal above **[measured, by eye]**: today's 7pt shrink beside the new reflow of the same
+table, and the reflow is 10pt with one line per row but for one
+(`design/evidence/t26a2/after-sheet1-p0.png`). So **R2's original claim stands** — reflow beats deep
+shrinking — and the question this plan was written to answer is live again.
+
+## What preferring reflow costs — measured, not estimated
+
+Reflow is the form that overflows the page on unbreakable content (**T29**). So moving elements into
+it spends against a known defect, and the honest question is not *"is reflow nicer"* but *"how many
+of the elements it would newly claim would break?"*
+
+Every table in the corpus was rendered reflowed in portrait, with ink past the right margin detected
+in the raster — an actual overflow check, not a proxy **[measured]**:
+
+| Rung today | Count | Long token 30+ | **Overflows if reflowed** |
+|---|---|---|---|
+| **already reflows** | 25 | 13 | **4 — today, in shipped output** |
+| landscape + shrink | 49 | 24 | **2** |
+| landscape, fits at full size | 10 | 2 | 0 |
+| portrait shrink 9pt+ | 46 | 19 | 0 |
+| portrait shrink below 9pt | 68 | 27 | **1** |
+
+Three things fall out.
+
+**1. T29 is not a risk this plan would introduce. It is already shipping.** Four elements in the
+corpus render *today* with text running off the page, reported as `Reflowed` — the mechanism's own
+words for "handled". That is R3's silent degradation, live, in committed behaviour.
+
+**2. T26b would newly break 3 elements.** At a 9pt comfort floor with reflow preferred over
+rotation: 1 from the portrait-below-9pt group, 2 from landscape+shrink. Out of 117 elements moved,
+so **~2.6%** — small, real, and avoidable.
+
+**3. The cheap proxy is nearly useless.** 85 elements contain a 30+ character unbreakable token;
+**7** actually overflow. Reasoning from token length would have overstated the exposure roughly
+twelvefold and, on that basis, this plan would have been shelved. Only rendering answers it —
+the same lesson as the sheets, in a case where the plausible shortcut was available and wrong.
+
+## The order
+
+**O2, with a 9.0pt comfort floor, and reflow preferred over rotation.**
+
+- **Not O1** (an alternate always wins). Unchanged from the analysis above: every shrink in the
+  product is a table, so O1 makes `Reduction::Shrink` unreachable product-wide. It would also
+  discard authored column proportions for the 46 elements that shrink imperceptibly to 9.0–9.5pt,
+  where **[measured]** nothing overflows and nothing looks wrong.
+- **Not O3** (shrink all the way first). Fixes the wrong half; the 7.0–7.5pt outcomes are the ones
+  the evidence objects to.
+- **9.0pt**, so a squeeze of half a point either way keeps the authored shape and anything deeper
+  wraps at full size. A shrink is kept iff `chosen_size >= comfort_floor` — 9.0pt exactly stays
+  shrunk, which `shrink-slight.md` pins.
+
+### O2a vs O2b — **your call, and the pair is rendered**
+
+They differ over exactly 10 elements: the tables that rotate and then fit at full size.
+
+- **O2a** — reflow before any rotation. Table rotation disappears; rotation becomes image-only.
+- **O2b** — try landscape at base size first, then reflow. Those 10 keep their landscape page.
+
+**[measured]** exposure is identical: 0 of the 10 overflow either way. So this is purely about
+reading, and `design/evidence/t26a2/after-sheet3-p2.png` is the pair — panel A rotated at full size,
+panel B reflowed in portrait. Panel B now reads well and costs no page turn, which is why **O2a is
+recommended**, but O2b is defensible and the evidence for choosing is on the page rather than here.
+
+## Expected effect on the baseline
+
+**[measured — simulated from the shrink distribution, which T26a2 did not move]**, at 9.0pt, O2a:
+
+| | shrunk | reflowed | rotated | flagged |
+|---|---|---|---|---|
+| today | 163 | 25 | 84 | 70 (48%) |
+| after | 46 | 152 | 0 | 70 (48%) |
+
+**The flagged count does not move, and that is correct** — the same elements are compromised, just
+better. **T26b does nothing for R1**, and if a candidate ever did drop the flagged count, something
+would be being hidden rather than fixed.
+
+Rotation reaching zero for tables is **R5** arriving as written: the ladder's second-loudest signal
+goes quiet. The fixture census becomes the only place `rotated` is observed — via the image
+fixtures, which **[measured]** still produce it.
+
+## Implementation
+
+- `Floors` gains a table-only comfort floor beside `table_pt`, documented with the two-questions
+  table above.
+- The reorder lives entirely in `probe.rs`'s text-atomic branch; the image branch is untouched.
+- `render.rs` needs no change **[measured — read, not assumed]**: the axes compose, so reflow in
+  portrait already works.
+- Goldens: `a_reflowed_table_is_unchanged` should hold (already reflows); the ladder golden shrinks
+  to 7.5pt today and **will move** to a reflow — regenerate deliberately, with the reason recorded.
+  This time that prediction is checkable rather than assumed, because `golden_at` asserts the rung.
+
+### Predicted census diff — written before building
+
+| Fixture | Now | Predicted |
+|---|---|---|
+| `shrink-floor.md` (7.0pt) | 1 shrunk | 1 reflowed |
+| `shrink-slight.md` (9.0pt) | 1 shrunk | 1 shrunk — **boundary, kept** |
+| `rotate.md` (landscape 9.5pt) | 1 rotated, 1 shrunk | 1 reflowed — **rename, the name goes stale** |
+| `reflow.md`, `reflow-hostile.md` | 1 reflowed, 1 rotated | 1 reflowed — portrait now |
+| image fixtures | unchanged | unchanged — they keep `rotated` and `scaled` covered |
+
+If the real diff differs, the simulation was wrong and its corpus numbers cannot be trusted either.
+
+## The gate — **T29 first**
+
+**Recommend building T29 before T26b.** Not because T26b is unsound, but because the sequence is
+free to get right and expensive to get wrong:
+
+- T29 fixes **4 elements that are broken today** and prevents the **3** T26b would break. Done
+  first, T26b lands with zero new damage; done second, three documents regress in between.
+- It is contained: give long tokens a break opportunity in the alternate, where the wrapping is.
+- **[assumed]** it is small. That assumption is worth testing before committing to the order — if
+  T29 turns out to be a large task, building T26b first and accepting three regressions is a
+  reasonable trade, and that is a decision to make with the size in hand.
+
+**If you would rather have the reading improvement now, T26b is ready to build as specified** —
+the cost is three elements joining four already-broken ones, and both are fixed by T29 afterwards.
+
+## Doubts — audited
+
+### D1 · Is the simulation still valid after T26a2? — **VERIFIED**
+
+T26a2 changed how the alternate *renders*, not which rung is chosen — the census was unchanged
+across it **[measured]**. So the shrink distribution the counts are computed from is untouched.
+
+### D2 · Is 9.0pt the right comfort floor? — **not verified, and deliberately not tuned**
+
+**[assumed]**. T26c exists for this, against rendered pages. Kept as one named constant.
+
+### D3 · Does the overflow check have false negatives? — **not verified, bounded**
+
+It detects ink past the right margin at 1 pt/px on page 1 only. A table overflowing solely on a
+later page would be missed. **[assumed]** rare — overflow comes from a wide row, and the widest row
+is usually the header or an early one. Worth knowing the number is a floor, not an exact count.
+
+### D4 · Does the census still cover `rotated` after tables stop rotating? — **VERIFIED**
+
+`image-clipped.md` and `image-scaled.md` both decide Landscape **[measured]**, so the rung stays
+covered and `the_census_covers_every_compromise_kind` stays honest.

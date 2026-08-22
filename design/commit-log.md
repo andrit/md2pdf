@@ -402,3 +402,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Widths are measured from the emitted markup rather than the rendered text; a `ponytail:` records
   > the ceiling. A link's URL inflates its column, which at worst grants a narrow column `1fr`.
+- `<pending>` docs: re-vet the ladder order against measured overflow exposure (T26b)
