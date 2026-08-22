@@ -29,7 +29,7 @@ use md2pdf_typeset::Typesetter;
 
 /// Real existence, so a missing image is missing for the same reason it would be in
 /// production rather than because a stub said so.
-struct CorpusImages;
+pub struct CorpusImages;
 
 impl ImageProbe for CorpusImages {
     fn exists(&self, path: &Path) -> bool {

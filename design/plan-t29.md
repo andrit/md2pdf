@@ -108,6 +108,7 @@ means the next silent regression is caught.
 2. The **census does not move** — this changes appearance, not rungs.
 3. The overflow oracle exists as a committed helper, with a fixture that would fail without the fix.
 4. **Corpus re-measured: the 7 overflowing elements go to 0** — the number that defines success.
+   ❌ **NOT MET — 4 remain.** See the outcome below and flag **F8**.
 5. `a_reflowed_table_is_unchanged` regenerated deliberately; the reason recorded.
 6. `verify.sh` green.
 
@@ -141,3 +142,38 @@ tables than it already is. It remains reachable for images. **[measured]** the c
 The oracle checks page 1 only, at 1 pt/px. A table overflowing solely on a later page would be
 missed. **[assumed]** rare, since overflow comes from a wide row and the widest is usually early.
 Building the oracle properly is the chance to fix this — check every page.
+
+---
+
+## Built — 2026-08-22 · partially
+
+**Criterion 4 was not met.** 7 would have overflowed without this change; **4 still do**. The task is
+committed as a real improvement and an unfinished one, rather than reported as a success — the
+residual is flag **F8**, scheduled as **T29b**.
+
+### What did work
+
+- Breaks in the alternate only; the body keeps its runs, pinned by `the_body_keeps_its_runs_unbroken`.
+  That asymmetry is what protects the probe's measurements.
+- Emitting the cells twice rather than rewriting markup. No parser, no drift, and
+  `a_second_pass_does_not_double_count_compromises` pins the one hazard it introduced.
+- Rungs unchanged — 152 reflowed / 46 shrunk / 70 flagged — so this altered appearance, not
+  decisions, exactly as predicted.
+
+### The threshold had to become relative, and the oracle is why
+
+A flat 24 characters let `below-comfort-reflows.md` spill 21pt — **caught by the overflow oracle on
+its first run**, in a fixture that had been committed and green for two commits. A flat 16 would have
+newly broken ~930 ordinary words in the corpus **[measured]**, so the limit became `96 / columns`: a
+20-character word has room in a two-column table and none in a nine-column one.
+
+### What the failure teaches
+
+The plan's causal story — *long unbreakable runs overflow, so give them breaks* — was **right about
+the mechanism and incomplete about the population**. Breaking fixed every case where the run exceeded
+the threshold, and the remaining four are something else. I guessed at the threshold being too
+permissive and the measurement contradicted it within a minute.
+
+**Without F1 this would have shipped as done.** The rungs were unchanged, the census was unchanged,
+every test was green, and the corpus produced 146 valid PDFs. Nothing except rendering the page and
+looking at the pixels could tell that four tables were still running off it.

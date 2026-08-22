@@ -153,7 +153,7 @@ fn the_escalation_ladder_is_unchanged() {
               | verylongvalue5 | verylongvalue6 | verylongvalue7 | verylongvalue8 |\n";
     let first = golden(md);
     assert_eq!(first, golden(md), "the ladder is not deterministic");
-    assert_eq!(first, "e8e8d3fcc3000d03/13511");
+    assert_eq!(first, "c3a517c31ab2a9d7/13646");
 }
 
 /// The reflow rung, which no golden covered until 2026-08-22.
@@ -170,5 +170,5 @@ fn a_reflowed_table_is_unchanged() {
         "| Column 0 | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |\n\
          |---|---|---|---|---|---|\n{row}{row}"
     );
-    assert_eq!(golden_at(&md, Reduction::Reflow), "71c16408be006309/12287");
+    assert_eq!(golden_at(&md, Reduction::Reflow), "b26ff54e8966a7ae/13462");
 }

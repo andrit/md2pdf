@@ -22,23 +22,24 @@ is a deeper analysis of one mechanism, and it stays there. This is everything el
 
 ## Open
 
-### F1 · `INSTRUMENT` — no overflow oracle
+### F1 · `INSTRUMENT` — no overflow oracle · **BUILT 2026-08-22 (T29)**
 
-**Nothing in the product or the test suite can answer "did this element run off the page".**
+> Built as `md2pdf-engine/tests/walking_skeleton/overflow.rs`. **It found a real overflow in a
+> committed fixture on its first run** — `below-comfort-reflows.md`, spilling 21pt, which no other
+> test could see. Kept open as a flag because the CLI `--check-overflow` half is not built.
 
-Typst does not report overflow, so the only way to know is to render, raster, and look for ink past
-the right margin. That has now been written as throwaway code **three times** — the T26a clip triage,
-the T26a2 column-spec experiment, and the T26b exposure measurement — and thrown away each time.
 
-It is the single most valuable missing instrument, because after T26b **152 of 198 compromised
-elements sit on the reflow rung**, and reflow is the rung that can overflow silently while reporting
-`Reflowed`. We would not know it had got worse.
+Typst does not report overflow — it lays content out and anything too wide simply extends past the
+margin. The only way to answer the question is to render the page and look at the pixels, and that
+had been written as throwaway code **four times** before it was kept.
 
-**Evidence:** 4 elements in the corpus overflow today; found only by rendering. A textual proxy
-(unbreakable token length) put the count at 85 — wrong by 12×.
+It matters because **152 of 198 compromised elements sit on the reflow rung**, and reflow can
+overflow *silently*: the ladder records `Reflowed`, which every consumer reads as handled. No golden
+hash helps — a hash says the bytes changed, not that the output is wrong. This is the only check in
+the project that judges the *result* rather than the decision.
 
-**Tracked:** unscheduled. Natural home is a test beside `describe_the_fixtures`, plus a
-`--check-overflow` mode on the CLI. **Worth building before T29**, since it is how T29 gets verified.
+**Remaining:** the `--check-overflow` CLI mode, so the question can be asked of a real directory
+without writing a test. Left open for that reason.
 
 ### F2 · `INSTRUMENT` — the corpus cannot be triaged without throwaway code
 
@@ -94,6 +95,48 @@ historical claim rather than a re-runnable one.
 corpus measurement taken so far. Gitignore, delete, or commit.
 
 **Tracked:** roadmap, *Decisions open for the operator*.
+
+### F8 · `DEFECT` — four tables still run off the page after T29
+
+**T29 reduced overflow; it did not remove it.** Measured under the ladder's own decisions, 4 of the
+elements it reflows still spill past the right margin:
+
+```
+   3.0pt  skill-extraction-guide.md
+  47.0pt  skill-extraction-guide.md
+  53.0pt  support-audit.md
+  55.0pt  design__task-flow.md      (in the forced-reflow run)
+```
+
+Without T29 the same corpus would have had **7** — the 4 that already overflowed before T26b plus
+the 3 T26b moved onto the rung. So the fix prevented the new breakage and left the original.
+
+**The cause is not the break threshold**, which was the obvious guess and is wrong: every long run in
+these documents *exceeds* its limit and does get breaks — `completeSubmission(existingId)` is 30
+against a limit of 24, `revision_requested` 20 against 13.
+
+**Hypothesis, untested:** `auto` columns cannot shrink below their content, and content *just under*
+the break threshold stays unbreakable — so several near-threshold cells in auto columns can sum past
+the width with no `1fr` able to absorb it. If so the fix is about which columns get `auto`, not about
+breaking, and it belongs with `column_spec` rather than `offer_breaks`.
+
+A second candidate: a cell's text arrives as several `Event::Text` fragments (split around inline
+code or a link), so a long run is never seen as long by `offer_breaks`, which works per event.
+
+**Tracked:** **T29b**. Diagnose before fixing — two plausible mechanisms, and the last three tasks
+each turned on a guess that measurement contradicted.
+
+### F7 · `DEBT` — zero-width spaces reach the PDF text layer
+
+T29 inserts `U+200B` into long runs in the reflow alternate, so a path or identifier copied out of a
+reflowed table pastes with invisible characters in it.
+
+Accepted: the alternative is text running off the page, and the alternate is only rendered when the
+table would not otherwise fit. But someone will eventually paste a broken path and have no idea why,
+so it is written down rather than discovered.
+
+**Tracked:** unscheduled. A fix would strip breaks from the PDF's copy text while keeping them for
+layout — Typst offers no obvious hook for that today.
 
 ---
 

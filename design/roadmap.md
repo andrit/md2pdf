@@ -83,7 +83,8 @@ Detail lives in the phase plans; this is the index.
 | T27 | **Ladder census** — committed fixture corpus + decision baseline *(the tripwire)* | 3d | ✅ staged |
 | T26a2 | **Proportional reflow alternate** — `auto` for narrow columns, `1fr` for the widest | 3d | ✅ staged |
 | T26b | **Ladder order** — 9pt comfort floor, reflow before rotation (O2a) *(closes R2)* | 3d | ✅ staged |
-| T29 | **Unbreakable cell content overflows the page** — planned in `plan-t29.md`; builds the overflow oracle (F1) | 3d | ☐ **planned, ready to build** |
+| T29 | Break long runs in the alternate; **build the overflow oracle** (F1) | 3d | ◐ **staged — partial, 7 → 4** |
+| T29b | **Four tables still overflow** *(F8)* — diagnose before fixing; two candidate mechanisms | 3d | ☐ |
 | T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ |
 | T26c | Floors by eye — the 9pt comfort floor is a starting point, not a measurement | 3d | ☐ needs your judgment |
 

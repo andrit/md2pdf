@@ -64,6 +64,7 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
             pending: Vec::new(),
             images: ImageManifest::new(),
             in_header: false,
+            breakable: None,
         };
         let body = em.sequence(&mut block.events.iter().peekable(), None);
         let mut body = body.trim_end().to_string();
@@ -98,8 +99,13 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         // into that block's body and is not separable here — the same nested-atomics
         // ceiling recorded in `classify.rs`.
         let element = match em.table.take() {
-            Some((columns, cells)) if block.class == ElementClass::Table => {
+            Some((columns, _)) if block.class == ElementClass::Table => {
                 let spec = column_spec(columns, &em.cell_widths);
+                // The alternate's cells are emitted a *second* time, with breaking on.
+                // Re-running the same code path rather than rewriting the first pass's
+                // markup: both forms then cannot drift, and nothing has to parse Typst
+                // to find where a break may safely go.
+                let cells = breakable_cells(block, ctx, &footnotes, columns).unwrap_or_default();
                 Element::with_reflow(
                     order,
                     block.class,
@@ -122,6 +128,33 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
     }
 
     out
+}
+
+/// Emit one table block's cells again, with break opportunities in long runs.
+///
+/// The second pass's `pending` compromises and `images` are **discarded**: the first
+/// pass already recorded them against this element, and counting them twice would
+/// inflate every Diagnostic — the attention gate would report a missing image twice for
+/// one table.
+fn breakable_cells(
+    block: &Block<'_>,
+    ctx: &SourceContext,
+    footnotes: &HashMap<String, String>,
+    columns: usize,
+) -> Option<String> {
+    let mut em = Emitter {
+        ctx,
+        table: None,
+        cell_widths: Vec::new(),
+        cell_index: 0,
+        footnotes,
+        pending: Vec::new(),
+        images: ImageManifest::new(),
+        in_header: false,
+        breakable: Some(unbreakable_run(columns)),
+    };
+    em.sequence(&mut block.events.iter().peekable(), None);
+    em.table.take().map(|(_, cells)| cells)
 }
 
 fn is_footnote_definition(block: &Block<'_>) -> bool {
@@ -153,11 +186,74 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
             pending: Vec::new(),
             images: ImageManifest::new(),
             in_header: false,
+            breakable: None,
         };
         let inner = em.sequence(&mut block.events.iter().peekable(), None);
         map.insert(label.to_string(), inner.trim().to_string());
     }
     map
+}
+
+/// Roughly how many characters span the full text width at the base size.
+///
+/// ponytail: `convert` has no `Template`, so the page width cannot be known here — 96 is
+/// A4 minus margins at 10pt, measured. ceiling: a much narrower or wider template breaks
+/// the estimate. upgrade: pass the Template into conversion, or move break insertion
+/// into the typeset layer where the width is known.
+const CHARS_ACROSS: usize = 96;
+
+/// The longest run left alone, given how many columns share the width.
+///
+/// Relative to the column count rather than fixed: a 20-character word has room to spare
+/// in a two-column table and none in a nine-column one, so a single threshold either
+/// splits ordinary words needlessly or lets narrow columns overflow. A flat 24 did the
+/// second — `below-comfort-reflows.md` spilled 21pt past the margin, caught by the
+/// overflow oracle on its first run.
+fn unbreakable_run(columns: usize) -> usize {
+    (CHARS_ACROSS / columns.max(1)).clamp(8, 48)
+}
+
+/// Zero-width space — invisible, and a place Typst may wrap.
+const BREAK: char = '\u{200b}';
+
+/// Give long unbroken runs somewhere to wrap.
+///
+/// Typst cannot break a run of characters that offers no opportunity, so a cell holding
+/// `completeSubmission(existingId)` is at least as wide as that string however the
+/// columns are specified — the table overflows the page and the cells overprint each
+/// other, while the ladder records `Reflowed` and reads as handled.
+///
+/// **[measured]** a zero-width space works in plain text *and* inside `#raw`, which is
+/// the load-bearing fact: inline code is 77% of the long runs in the corpus, and raw
+/// text is otherwise rendered verbatim. See `design/plan-t29.md`.
+///
+/// Applied **before** escaping, so a break can never land inside an escape sequence.
+/// `U+200B` is not ASCII punctuation, so `escape` passes it through untouched.
+fn offer_breaks(text: &str, limit: usize) -> String {
+    let every = (limit / 2).max(4);
+    let mut out = String::with_capacity(text.len());
+    let mut run = 0usize;
+    // Measured over the whole run first: a short word must not be split just because it
+    // follows a long one.
+    for word in text.split_inclusive(char::is_whitespace) {
+        let trimmed = word.trim_end();
+        if trimmed.chars().count() <= limit {
+            out.push_str(word);
+            continue;
+        }
+        for c in word.chars() {
+            if c.is_whitespace() {
+                run = 0;
+            } else {
+                if run > 0 && run.is_multiple_of(every) {
+                    out.push(BREAK);
+                }
+                run += 1;
+            }
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// A column shares the leftover width when it is at least this fraction as wide as the
@@ -212,9 +308,24 @@ struct Emitter<'m> {
     images: ImageManifest,
     /// Table header cells render bold, as GitHub does.
     in_header: bool,
+    /// Insert break opportunities into runs longer than this many characters.
+    ///
+    /// Set only for the second pass over a table's cells, which builds the reflow
+    /// alternate. The body must keep its runs unbroken: its natural width is what the
+    /// probe measures to choose a rung, and a body that could wrap mid-token would
+    /// measure narrow and be given the wrong decision.
+    breakable: Option<usize>,
 }
 
 impl Emitter<'_> {
+    /// Break long runs, but only when emitting the alternate.
+    fn maybe_break<'t>(&self, text: &'t str) -> std::borrow::Cow<'t, str> {
+        match self.breakable {
+            Some(limit) => std::borrow::Cow::Owned(offer_breaks(text, limit)),
+            None => std::borrow::Cow::Borrowed(text),
+        }
+    }
+
     /// Render events until `until` closes the current construct, or the stream ends.
     fn sequence(
         &mut self,
@@ -231,9 +342,12 @@ impl Emitter<'_> {
                     // An End we did not open: the caller's frame will handle it.
                 }
                 Event::Start(tag) => out.push_str(&self.element(tag, events)),
-                Event::Text(t) => out.push_str(&escape(t)),
+                Event::Text(t) => out.push_str(&escape(&self.maybe_break(t))),
                 Event::Code(t) => {
-                    out.push_str(&format!("#raw(\"{}\")", escape_string(t)));
+                    out.push_str(&format!(
+                        "#raw(\"{}\")",
+                        escape_string(&self.maybe_break(t))
+                    ));
                 }
                 Event::SoftBreak => out.push(' '),
                 Event::HardBreak => out.push_str("#linebreak()"),
@@ -650,6 +764,66 @@ mod tests {
         assert!(
             !specs[1].contains("auto"),
             "second table inherited the first's widths: {specs:?}"
+        );
+    }
+
+    const ZWSP: char = '\u{200b}';
+
+    #[test]
+    fn long_runs_get_break_opportunities_in_the_alternate() {
+        // Inline code is 77% of the long runs in the corpus, and `#raw` renders text
+        // verbatim — so this is the case that matters most.
+        //
+        // Five columns: the threshold is relative to how many columns share the width,
+        // and in a two-column table this same run has room to spare and is left alone.
+        let a = alternate(
+            "| a | b | c | d | e |\n|---|---|---|---|---|\n\
+             | `completeSubmissionWithAVeryLongIdentifier` | x | y | z | w |",
+        );
+        assert!(a.contains(ZWSP), "no break offered in the alternate: {a}");
+    }
+
+    #[test]
+    fn the_body_keeps_its_runs_unbroken() {
+        // Load-bearing. The probe measures the *body* to choose a rung; a body that
+        // could wrap mid-token would measure narrow and be given the wrong decision.
+        let md = "| a | b | c | d | e |\n|---|---|---|---|---|\n\
+             | `completeSubmissionWithAVeryLongIdentifier` | x | y | z | w |";
+        let b = &bodies(md)[0];
+        assert!(!b.contains(ZWSP), "the body was broken too: {b}");
+    }
+
+    #[test]
+    fn ordinary_words_are_left_alone() {
+        let a = alternate("| a | b |\n|---|---|\n| short words only | nothing long here |");
+        assert!(!a.contains(ZWSP), "broke an ordinary word: {a}");
+    }
+
+    #[test]
+    fn breaking_does_not_disturb_escaping() {
+        // A break inserted after escaping could land inside `\#`, producing `\<zwsp>#`
+        // — a backslash escaping nothing, and a stray hash. Breaks go in first.
+        let a = alternate(
+            "| a | b | c | d | e |\n|---|---|---|---|---|\n\
+             | costs##and#more#hashes#than#you#would#like#here | x | y | z | w |",
+        );
+        assert!(
+            !a.contains(&format!("\\{ZWSP}")),
+            "break split an escape: {a}"
+        );
+        assert!(a.contains("\\#"), "escaping was lost: {a}");
+    }
+
+    #[test]
+    fn a_second_pass_does_not_double_count_compromises() {
+        // The alternate is emitted by running the block again. Its compromises and
+        // images must be discarded, or one missing image in a table is reported twice.
+        let out = run("| a | b |\n|---|---|\n| ![gone](nope.png) | x |");
+        assert_eq!(
+            out.compromises.len(),
+            1,
+            "compromises double-counted: {:?}",
+            out.compromises
         );
     }
 

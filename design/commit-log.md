@@ -439,4 +439,47 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > **R5 gets sharper, not milder.** Rotation and clipping are both zero, and 152 of 198 compromised
   > elements now sit on one rung — so a defect in reflow is a defect nearly everywhere, and
   > `Reflowed` reads the same whether the table wrapped beautifully or ran off the page.
-- `<pending>` docs: add the flags register; plan T29 against measured token locations
+- `7ea6bd1` docs: add the flags register; plan T29 against measured token locations
+
+- `<pending>` **feat(convert): break long runs in the reflow alternate; build the overflow oracle** (T29).
+
+  > **Partial. 7 elements would have overflowed; 4 still do.** Committed as a real improvement and an
+  > unfinished one rather than reported as success — the residual is flag **F8**, scheduled as T29b.
+  >
+  > `Reflow` sits immediately before `Clip` because the alternate is supposed to always fit, and it
+  > does not: with unbreakable content it runs off the page and the cells overprint into mush, while
+  > the ladder records `Reflowed` and every consumer reads that as handled.
+  >
+  > Long runs now get a zero-width break opportunity — **in the alternate only**. The body keeps its
+  > runs unbroken, which is load-bearing: the probe measures the body to choose a rung, so a body that
+  > could wrap mid-token would measure narrow and be given the wrong decision. Both halves are pinned
+  > by test.
+  >
+  > Built by emitting the table's cells a **second time** with breaking on, rather than rewriting the
+  > first pass's markup. Both forms then come from one code path and cannot drift, and nothing has to
+  > parse Typst to find where a break may safely go. The second pass's compromises and images are
+  > discarded, or one missing image in a table would be reported twice.
+  >
+  > **Two measurements decided the design, and both contradicted what I had written.** Long runs come
+  > from *inline code* (196 of 256), not links (15) — the earlier claim that markup surgery inside
+  > `#link` made this hard was wrong. And a zero-width space breaks inside `#raw`, which is the
+  > load-bearing fact and not obvious, since raw text is otherwise rendered verbatim.
+  >
+  > **The threshold had to become relative to column count.** A flat 24 characters let
+  > `below-comfort-reflows.md` spill 21pt — caught by the new oracle on its first run, in a fixture
+  > that had been committed and green for two commits. A flat 16 would have newly broken ~930 ordinary
+  > words in the corpus, so the limit is `96 / columns`: a 20-character word has room in a two-column
+  > table and none in a nine-column one.
+  >
+  > **The oracle is the deliverable that outlives the fix** (flag **F1**). Typst does not report
+  > overflow — it lays out content and anything too wide simply extends past the margin. The only way
+  > to ask is to render and look at the pixels, written as throwaway code four times before this.
+  > It checks every page, and ships with a negative control that strips the breaks back out and
+  > asserts it still fires; a guard that never fails is not a guard.
+  >
+  > **Without it this would have shipped as done.** Rungs unchanged, census unchanged, every test
+  > green, 146 valid PDFs — and four tables still running off the page. That is exactly the failure
+  > this project keeps finding: the record says handled, the output is wrong, and nothing fails.
+  >
+  > Also flagged: **F7** `DEBT`, zero-width spaces reach the PDF text layer, so a path copied out of a
+  > reflowed table pastes with invisible characters in it.
