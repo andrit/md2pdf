@@ -31,11 +31,16 @@ lines = open(path).read().split("\n")
 out, stale, ambiguous = [], [], []
 
 for line in lines:
-    m = re.match(r"^- `<pending>` \*\*(.+?)\*\*(.*)$", line)
+    # Bold is optional: code commits carry a **bold subject** and a body, docs commits
+    # are listed by subject alone. The first version of this matched only the bold
+    # form and so was blind to every docs entry — which is most of them.
+    m = re.match(r"^- `<pending>` (?:\*\*(?P<bold>.+?)\*\*|(?P<plain>[^*].*?))(?P<rest>\.?)$", line)
     if not m:
         out.append(line)
         continue
-    subject, rest = m.group(1), m.group(2)
+    bold = m.group("bold")
+    subject = bold or m.group("plain")
+    rest = m.group("rest") or ""
 
     # The bold text is the commit subject minus its task suffix, so match the whole
     # thing. Matching the task tag alone is ambiguous — "(T27)" named both the commit
@@ -44,7 +49,8 @@ for line in lines:
     if len(hits) == 1:
         h, s = hits[0]
         stale.append(f"  {h}  {s}")
-        out.append(f"- `{h}` **{subject}**{rest}" if fix else line)
+        filled = (f"- `{h}` **{subject}**{rest}" if bold else f"- `{h}` {subject}{rest}")
+        out.append(filled if fix else line)
     else:
         if len(hits) > 1:
             ambiguous.append(f"  {subject!r} matches {len(hits)} commits: {hits}")

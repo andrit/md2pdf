@@ -146,6 +146,35 @@ not suppress discovery — it moves the *knowable* half before the code, leaving
 unknowable half where it belongs. If a plan stops changing entirely, that is a warning sign, not
 success: it means the build stopped being allowed to teach anything.
 
+### Class C, worked — T26b, 2026-08-22
+
+The clearest instance so far, and the reason the class exists.
+
+T26b was planned to reorder the ladder's rungs, on the strength of R2: *reflow reads better than deep
+shrinking*. The plan was measured where it could be — the corpus triaged by element class, comfort
+floors simulated, the predicted census diff written down in advance. It recommended O2.
+
+Then the three comparison sheets were rendered and **looked at**, and the recommendation was wrong.
+Not mis-tuned — wrong at the premise. Deep shrinking beat reflow on every real table, because the
+reflow alternate emits `columns: (1fr, …)`, equal shares, giving a column holding "P1" the same width
+as a column holding a paragraph. R2 had been founded on a *synthetic* table whose columns were all
+the same width, the one shape where equal shares are right.
+
+**Two documents were confidently wrong in the same direction** — the plan and the risk register — and
+the risk register was the artefact written specifically to catch this kind of error. No amount of
+further planning would have found it: every input to the reasoning was correct, and the conclusion
+still did not survive contact with a rendered page.
+
+The rule this supports is the project's oldest habit, and it keeps earning its place: **the italic
+bug, the 25 clipped tables, and this all came from rendering the output and looking at it.** Text
+assertions cannot see any of them. When a decision is about how something *reads*, no measurement
+substitutes for the page — so produce the page, look, and let it overrule the plan.
+
+Corollary, and the reason to write this down rather than feel good about it: **it is not a failure
+of planning that the plan changed here.** The measured half was worth measuring — it is what made the
+sheets buildable and what made the contradiction legible when it arrived. The plan did its job by
+being specific enough to be proved wrong.
+
 ---
 
 ## How to use this

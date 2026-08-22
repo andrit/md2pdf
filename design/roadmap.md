@@ -368,7 +368,7 @@ looked at.
 | Nested atomics `ponytail:` (table inside a blockquote never escalates) | 3f or later; surfaced by `/phase-audit` |
 | ~~Italic face missing~~ — ✅ fixed 2026-08-18, pinned by a styling test | done |
 | **Styling assertions are new and thin** — one test covers italic; nothing pins colour, size, or spacing | extend as 3e templates land |
-| Glyph coverage beyond Latin | before 6 |
+| **Glyph coverage** — ✅ U+2705 and ❌ U+274C render as tofu; measured 2026-08-22 in 28 and 8 of 146 documents. ⚠ ✓ ✗ → ▸ and code-fence box drawing are fine. | **T28** — was "before 6", now scheduled with evidence |
 | Bare-URL autolinks unsupported by pulldown-cmark | accepted ceiling |
 | ~~Clipping rung never probed~~ — **confirmed dead code 2026-08-19**: `probe.rs` can only emit none/shrink/rotate, so `Rung::Clip` is unreachable. Scheduled as T14 | T14 |
 | One integration-test binary per crate — new `tests/*.rs` files that link typst will OOM the linker | permanent build constraint |
