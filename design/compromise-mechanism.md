@@ -141,7 +141,19 @@ that the gate fires *where a decision was made* becomes technically true and pra
 
 **Watch:** the flagged percentage. **It should fall as the ladder improves, not rise.**
 
-### R2 · The order of the rungs is an assumption nobody has tested · **LIVE, and evidence says it is wrong**
+### R2 · The order of the rungs is an assumption nobody has tested · **RE-SCOPED 2026-08-22 — the premise was wrong**
+
+> **Rendered and looked at (`design/plan-ladder-order.md`, evidence section).** Deep shrinking beats
+> the current reflow on every real table tried. The founding comparison used a *synthetic* table
+> whose columns were all the same width — the one shape for which `columns: (1fr, …)` is right.
+>
+> The defect is in the **alternate**, not the order: equal `1fr` shares give a "P1" column the same
+> width as a prose column. **T26a2** fixes that (`auto` for narrow columns, `1fr` for the widest);
+> the ordering question is parked until there is an alternate worth preferring.
+>
+> The text below is kept as written, because it is the reasoning that was acted on and the record of
+> how a defensible-looking inference went wrong.
+
 
 The ladder shrinks **before** it reflows. So a table needing 90% of its width is squeezed to ~9pt
 rather than being reflowed at full size — and 41 elements are currently rendered at 7.0–7.5pt.
@@ -161,7 +173,16 @@ and 84 rotations are worse output than necessary.
 shrunk, or before being rotated? Rotation especially: a landscape page for a table that could simply
 wrap is a large disruption to the reading order for no gain.
 
-### R3 · Silent degradation — a recorded Compromise still looks handled · **UNVERIFIED**
+### R3 · Silent degradation — a recorded Compromise still looks handled · **PARTLY ANSWERED 2026-08-22**
+
+> The 12-column case below is hypothetical: **no table in the corpus has more than 7 columns**
+> [measured]. And the answer to "nobody has looked at a 7pt table" is now: someone has, and
+> **it reads well** — one line per row, columns sized to content (`sheet-2`, panel B).
+>
+> The degradation is real but it is in the *reflowed* form, not the shrunk one — the opposite
+> of what this risk predicted. Column proportion, not column count, and it shows at three
+> columns as clearly as at seven. What remains true is the general point: **fitting and being
+> readable are different properties, and only one of them is automated.**
 
 `Reflowed` and `ShrunkToFloor` both report success. Neither has been judged for readability at the
 extremes:

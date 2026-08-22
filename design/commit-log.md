@@ -360,3 +360,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > reordering worked, and building it afterwards means judging the change with the thing it
   > altered.
 - `<pending>` docs: backfill commit-log hashes; script the half that was honour-system
+- `<pending>` docs: render the T26b comparison sheets; withdraw the reordering recommendation

@@ -195,6 +195,87 @@ so `documents/` stays untracked and optional.
 
 ---
 
+## Evidence — rendered and looked at, 2026-08-22
+
+**The recommendation above is withdrawn.** Not adjusted — withdrawn. The sheets say the premise
+under it is wrong, and the reason is not the one this plan was arguing about.
+
+Sheets in `design/evidence/t26b/`, built by cloning one real table and forcing each copy's decision
+through `apply_override`, so each panel is what the product would actually produce at that rung:
+
+| Sheet | Table | Source |
+|---|---|---|
+| 1 · shrink vs reflow, five ways | 6 columns, 22 rows | `factory/containerization-plan.md` |
+| 2 · where reflow looks worst | 7 columns, 16 rows — **the widest in the corpus** | `support-audit.md` |
+| 3 · the O2a/O2b pair | 3 columns, 12 rows, rotates and then fits | `design__task-flow.md` |
+
+### What they show — consistently, on all three
+
+**Deep shrinking beats reflow on real tables, and it is not close.**
+
+- **Sheet 2** is the clearest. At **7pt**, all 16 rows fit in half a page, one line each, columns
+  sized to their content. **Reflowed**, the same table spans two pages, every cell wrapped to 3–5
+  lines — while `Tier` and `Priority`, which hold "Free" and "P1", are given the same width as
+  `Path`.
+- **Sheet 3** kills O2a outright. Panel A — today's landscape page — is 10pt, one line per row, and
+  uses 40% of the page. Panel B gives `Step` and `Actor` a third of the width each to hold "1" and
+  "System", and squeezes `Action`, the only column with content, into the remaining third.
+- **Sheet 1**'s 9.5pt panel already wraps its long column while keeping every other column narrow —
+  which is exactly the layout reflow *should* be producing and does not.
+
+### The actual defect — the alternate, not the order
+
+`Element.reflow` emits `columns: (1fr, 1fr, …)`. **`1fr` means equal shares**, so every column gets
+the same width regardless of what it holds. On a table with one prose column and five narrow ones —
+which is what real tables look like — that is close to the worst possible allocation.
+
+T26a chose it against a *synthetic* 5-column table whose cells were all the same width, the one case
+where equal columns are right. **That is why R2 looked true: the comparison that founded it was not
+representative.**
+
+Typst can express the correct thing directly — `columns: (auto, auto, 1fr)` — where narrow columns
+size to content and the wide one absorbs the wrapping. That is what a browser does with a `<table>`,
+and what the 9.5pt panel of sheet 1 shows Typst doing on its own.
+
+### Consequence for the task
+
+**T26b is premature and is parked.** Reordering the rungs decides *when* to prefer reflow, and the
+evidence says the current reflow is worse than the thing it would displace at every setting. Moving
+it earlier would make the output worse, and the census would faithfully record the degradation as
+152 reflows and call it progress — R5, arriving exactly as written.
+
+**New task, first: T26a2 — proportional reflow alternate.** Give `auto` to columns that do not need
+to wrap and `1fr` only to the widest, decided in `emit.rs` from cell content length, which is
+available without measuring. Then re-render these three sheets and ask the ordering question again
+against an alternate worth choosing.
+
+**Prediction, to be checked and not assumed:** with proportional columns, sheet 3 panel B becomes
+close to panel A but in portrait, and the O2a/O2b question stops being obvious in favour of A.
+
+### R3 is answered, and not the way it was posed
+
+`compromise-mechanism.md` R3 worries about a 12-column reflow at ~40pt per column. **No table in the
+corpus has 12 columns — the widest has 7** [measured]. Reflow's problem is not column *count* but
+column *proportion*, and it shows up at three columns (sheet 3) as clearly as at seven.
+
+### Separate finding — missing glyphs, not a ladder issue
+
+Visible in every sheet-1 panel: the `Dockerfile` and `docker-compose` columns render as **tofu
+boxes**. Probed directly (`design/evidence/t26b/glyphs.png`):
+
+| Renders | Tofu |
+|---|---|
+| ⚠ ✓ ✗ → ▸, box drawing **inside a code fence** | **✅ U+2705, ❌ U+274C** |
+
+Emoji-presentation characters only, and no vendored font covers them. **[measured]** ✅ appears in
+28 of 146 documents and ❌ in 8 — so roughly a fifth of real documents render boxes where the author
+put a tick. Box drawing in code fences, the case in 46 documents, is fine; box drawing in *prose*
+renders but misaligns, and is rare.
+
+Raised as its own task rather than folded in here: it is a font-coverage decision, not a ladder one.
+
+---
+
 ## Evidence to produce before deciding
 
 I produce these; **the call is yours** — it is a judgment about what reads well in your documents,
