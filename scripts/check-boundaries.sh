@@ -6,6 +6,7 @@
 #   md2pdf-paths    is the only crate that may touch the filesystem       (INV-9)
 #   the pure core   must contain nothing nondeterministic                 (INV-7)
 #   nothing anywhere may reach the network                                 (INV-1)
+#   the engine never learns what a window is                              (INV-8)
 #
 # The dependency graph already makes the first one impossible to violate by accident
 # (typst is not in the other manifests). This catches the second, and catches someone
@@ -100,5 +101,41 @@ if [ -n "$netsrc" ]; then
   fail=1
 fi
 
-[ $fail -eq 0 ] && echo "boundaries OK: typst confined, fs confined, core deterministic, no network"
+# INV-8: the engine does not know what a window is. Only an adapter may.
+#
+# The out-of-process-adapter design rests entirely on this, and today it is protected by
+# nothing but the absence of a UI. The moment phase 4 starts, "just import egui here for
+# a second to get the preview working" is a one-line change with no alarm attached — and
+# it is exactly the kind of shortcut that survives because it works.
+#
+# Cheap now, expensive later: adding this before the adapter exists costs one grep.
+# Adding it afterwards means cleaning up whatever leaked, against a working UI that
+# nobody wants to break.
+#
+# Scoped to the five core crates rather than the workspace, because the adapter is an
+# in-workspace crate (`md2pdf-cli` today, `md2pdf-gui` on the host later) and is
+# *supposed* to link a toolkit. That is also this guard's honest limit: it sees direct
+# dependencies of those five, not a toolkit arriving transitively. The realistic accident
+# here is a direct import, not a transitive one — unlike the network rule, which greps
+# the lock file for exactly that reason.
+core_crates='crates/md2pdf-domain crates/md2pdf-convert crates/md2pdf-typeset'
+core_crates="$core_crates crates/md2pdf-paths crates/md2pdf-engine"
+ui='eframe|egui|egui_extras|egui-winit|winit|wgpu|glutin|tao|wry|iced|druid|slint|dioxus'
+ui="$ui|gtk|gtk4|sdl2|softbuffer|raw-window-handle|accesskit|muda|arboard|rfd"
+
+ui_manifests=$(grep -nE "^[[:space:]]*($ui)[[:space:]]*=" $(printf '%s/Cargo.toml ' $core_crates) || true)
+if [ -n "$ui_manifests" ]; then
+  echo "FAIL: a UI toolkit in a core crate's manifest — the engine must not know what a window is (INV-8):"
+  echo "$ui_manifests" | sed 's/^/  /'
+  fail=1
+fi
+
+ui_src=$(grep -rn --include='*.rs' -E "\\buse +($ui)::|\\b($ui)::" $core_crates | strip_comments || true)
+if [ -n "$ui_src" ]; then
+  echo "FAIL: a UI toolkit referenced in core source (INV-8):"
+  echo "$ui_src" | sed 's/^/  /'
+  fail=1
+fi
+
+[ $fail -eq 0 ] && echo "boundaries OK: typst confined, fs confined, core deterministic, no network, no UI in the engine"
 exit $fail

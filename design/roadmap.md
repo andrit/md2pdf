@@ -77,7 +77,7 @@ Detail lives in the phase plans; this is the index.
 | T21 | Batch `Command`/`Event` + orchestration | 3c2 | ✅ staged |
 | T22 | Guard G3 — determinism + golden-hash tests | guards | ✅ staged |
 | T23 | Guard G1 — no network (greps `Cargo.lock`) | guards | ✅ staged |
-| T24 | Guard G2 — no UI deps — **unblocked: adapter is an in-workspace crate** | guards | ☐ |
+| T24 | Guard G2 — no UI toolkit in the five core crates (INV-8) | guards | ✅ staged |
 | T25 | CLI binary — `pico-args`, `--json`, tracing, exit codes | 3d | ✅ staged |
 | T26a | Tables reflow instead of clipping (option C) | 3d | ✅ staged |
 | T27 | **Ladder census** — committed fixture corpus + decision baseline *(the tripwire)* | 3d | ✅ staged |

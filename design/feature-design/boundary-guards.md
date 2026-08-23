@@ -54,7 +54,16 @@ actually checks.
 
 ---
 
-### G2 · The engine never learns what a UI is — `INV-8`
+### G2 · The engine never learns what a UI is — `INV-8` · **BUILT 2026-08-23 (T24)**
+
+> Built as two greps over the five core crates — manifest keys and source references — with the
+> adapter deliberately outside the scope. **All three cases were exercised**: a toolkit in
+> `md2pdf-engine/Cargo.toml` fails, `egui::Context` in `job.rs` fails, and the same dependency added
+> to `md2pdf-cli` passes. The third matters as much as the first two — a guard that also blocks the
+> legitimate case gets switched off.
+>
+> **The open question below is resolved**: the adapter is an in-workspace crate, so the rule has the
+> shape described rather than being trivially satisfied.
 
 **What:** `domain`, `convert`, `typeset`, `paths`, `engine` may not depend on `eframe`, `egui`,
 `winit`, or any windowing crate. Only the adapter crate may.
@@ -69,9 +78,13 @@ with no alarm attached, and it is exactly the sort of shortcut that survives bec
 Adding the guard before the adapter exists costs one grep. Adding it afterwards means first
 cleaning up whatever leaked, against a working UI that people are reluctant to break.
 
-**Open question:** the guard's value depends on where the adapter lives. If it is a crate in this
-workspace (`md2pdf-gui`), the rule is exactly the shape above. If it is a separate repository, the
-guard is trivially satisfied and close to useless. **This should be settled before building G2.**
+**Open question — settled 2026-08-23:** the adapter lives in this workspace, so the rule is exactly
+the shape above.
+
+**Honest limit:** it sees direct dependencies of the five core crates, not a toolkit arriving
+transitively. That is a deliberate difference from the network rule, which greps `Cargo.lock`
+precisely because *there* the realistic accident is transitive. Here it is a direct import — someone
+reaching for `egui` to get a preview working.
 
 ---
 

@@ -545,3 +545,27 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > breaks were not enough, `auto` refused to shrink, and a uniform threshold could not survive a
   > lopsided spec. None of it would have been visible without the overflow oracle (**F1**) — rungs,
   > census, goldens and valid-PDF counts were unchanged at every step.
+
+- `<pending>` **feat: guard the engine against learning what a window is** (T24, G2).
+
+  > `INV-8` — the whole out-of-process-adapter design rests on the engine never depending on a UI
+  > toolkit, and until now that was protected by nothing but the absence of a UI. The moment phase 4
+  > starts, *"just import egui here for a second to get the preview working"* is a one-line change
+  > with no alarm attached, and it is exactly the kind of shortcut that survives because it works.
+  >
+  > Two greps over the five core crates: dependency keys in their manifests, and references in their
+  > source. Scoped to those five rather than the workspace, because the adapter is an in-workspace
+  > crate and is *supposed* to link a toolkit — which resolves the open question the guards document
+  > raised before this could be built.
+  >
+  > **All three cases exercised, not just the failing ones.** A toolkit in `md2pdf-engine/Cargo.toml`
+  > fails; `egui::Context` in `job.rs` fails; the same dependency added to `md2pdf-cli` passes. The
+  > third is the one that keeps the guard alive — one that also blocked the legitimate case would be
+  > switched off the first time it got in the way.
+  >
+  > **Honest limit, recorded in the script:** it sees direct dependencies, not a toolkit arriving
+  > transitively. That is a deliberate difference from the network rule, which greps `Cargo.lock`
+  > because *there* the realistic accident is transitive. Here it is a direct import.
+  >
+  > Cheap now, expensive later, which is the gate test in `invariants.md`: one grep before the
+  > adapter exists, versus cleaning up whatever leaked against a working UI nobody wants to break.
