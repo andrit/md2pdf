@@ -87,9 +87,9 @@ Detail lives in the phase plans; this is the index.
 | T29b | Weighted `fr` columns — diagnosed F8 as `auto` refusing to shrink | 3d | ◐ **staged — severity 6× down, count still 4** |
 | T29c | Per-column break limits, from the weights that size them *(F8: 4 → 1)* | 3d | ✅ staged |
 | T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ |
-| T30 | **Base size 12pt** — the readable target, not the assumed one *(F10)* | 3d | ☐ **next, blocks T26c** |
+| T30 | **Base size 12pt** — the readable target, not the assumed one *(F10)* | 3d | ✅ staged |
 | T31 | **Inspect `comemo` memory growth** *(F3, three sightings)* — 3f's recompile loop rests on it | 3f | ☐ **before 3f** |
-| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ☐ blocked on T30 — the pairs must be re-rendered at the right base |
+| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ☐ **next** — unblocked by T30; render the pairs at the 12pt base |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a

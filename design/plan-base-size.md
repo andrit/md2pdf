@@ -107,6 +107,20 @@ only a proxy for that when the baseline is honest.
    7.0pt. Both will move, and their names will lie again if they are not re-measured. The census
    will show it.
 
+   > **Superseded 2026-08-23, on building it. The prediction was wrong: neither size moved.**
+   >
+   > **[measured]** the ladder's chosen size is *absolute*. A table fits when its natural width at
+   > that size fits the page, which is a fact about the content and the page — not about the base
+   > it started from. `shrink-slight.md` resolves to 9.0pt at a 10pt base and at a 12pt base alike;
+   > `below-comfort-reflows.md` resolves to 7.5pt at both — *derived* from its measured 766.5pt natural
+   > width, by the arithmetic the 9.0pt case validates (the "7.0pt" above was already wrong).
+   > The census confirms it: **no rung moved on any fixture.**
+   >
+   > What moved is what the names *mean*. 12 → 9 is a quarter off where 10 → 9 was a tenth, so
+   > `shrink-slight.md` is renamed **`shrink-to-comfort-floor.md`** — which is the role it actually
+   > plays, pinning the `>=` boundary. Prose in both fixtures now records the size *and* that it is
+   > base-invariant, so the next base change does not re-open this.
+
 4. **Every golden moves.** All seven, because every rendering changes size. That is expected and
    must be regenerated deliberately, in this commit, with the reason recorded.
 
@@ -125,11 +139,26 @@ only a proxy for that when the baseline is honest.
 
 ## Doubts — audited
 
-### D1 · Does 12pt push more tables off the page? — **must be measured**
+### D1 · Does 12pt push more tables off the page? — **yes, once — and it found a real defect**
 
 Larger text in the same width means every table needs more room, and reflow is already the rung
-carrying 152 of 198 compromises. **[measured]** overflow is 1 of 152 today. Exit criterion 5 checks
-it rather than hoping.
+carrying 152 of 198 compromises. **[measured]** overflow was 1 of 152 before.
+
+> **Answered 2026-08-23 by building it.** The corpus count is **unchanged at 1 of 152** (the same
+> 2pt overhang, **F8**). But `reflow-hostile.md` — a fixture, green for eight commits — spilled 4pt,
+> and the cause was not the base size.
+>
+> **`break_limits` never charged a table cell for its inset.** It shared `chars_across` — the
+> characters that fit the *full text width* — among the columns, while each cell also pays 5pt of
+> padding on each side. A twelve-column table spends 120 of its 483 points on inset, so the limit
+> was a quarter too generous; at 10pt there was slack to absorb that, and at 12pt there was not.
+>
+> Fixed by giving each column its own share **and then** deducting its own inset — deducting first
+> spreads the cost in proportion to weight and under-charges the narrow columns, which is the F8
+> shape exactly. Pinned by `a_column_is_charged_its_own_inset_not_a_share_of_the_tables`.
+>
+> **This is the fourth defect in this family** (T29, T29b, T29c, and now T30), and all four are one
+> shape: `convert` estimating layout arithmetic that `typeset` could measure exactly. See D5.
 
 ### D2 · Does the comfort floor still mean the same thing? — **no, and T26c must re-decide**
 
@@ -143,6 +172,33 @@ it must be tested against the new base.
 **[assumed]** out of scope. Raising the base is one change with one measurable effect; changing the
 page geometry at the same time would make the baseline movement uninterpretable. 3e owns the
 template.
+
+### D5 · Why does this family of defect keep recurring? — **the estimator, and it is now the operator's call**
+
+**[measured]** four consecutive tasks have fixed the same shape of bug, each found only by rendering
+a page and counting pixels, never by a test:
+
+| | What the estimate was missing |
+|---|---|
+| T29 | that a run with no break opportunity cannot wrap at all |
+| T29b | that an `auto` column refuses to shrink |
+| T29c | that a lopsided spec gives columns unequal room |
+| T30 | the base size, and then the cell inset |
+
+`convert` decides where text may break, which requires knowing how wide text will be — and it does
+not know, because Typst does. Each fix adds a term to the estimate; the next omission is found the
+same way. **[assumed]** the class closes only by moving break insertion into `md2pdf-typeset`, which
+`The change` §2 listed as *"most correct, largest change"* and declined on cost. That deferral is
+what the last four tasks have been paying for.
+
+**Raised with the operator 2026-08-23**, who scoped it: *"we don't need to worry about a 12 column
+table. this is a md file, not an excel file."*
+
+**Decided:** the widest table in the corpus has **7 columns** [measured, R3]. `reflow-hostile.md`'s
+twelve are synthetic and stay only as a stress case — **they do not justify further tuning**, and a
+future overflow that only a 12-column table can produce is to be flagged, not engineered away. Note
+that today's inset fix is *not* a wide-table special case: it corrected every reflowed table's
+limits, and the narrow column of a two-column `(1fr, 6fr)` spec moved 10 → 9 characters with it.
 
 ### D4 · Is 12pt right, or is it the first honest guess? — **the operator's call, and recorded as such**
 

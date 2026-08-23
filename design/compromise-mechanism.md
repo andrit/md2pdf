@@ -84,10 +84,49 @@ otherwise re-measure in landscape:                          (images only, in pra
 | T14 | `Clip` made reachable | it was unreachable code — elements too wide for landscape overflowed silently |
 | T26a | `Reflow` added before `Clip` | 25 elements across 9 real documents were losing columns, and every one was a table |
 
-## 6 · Baseline — 146 real documents, 2026-08-22
+## 6 · Baseline — 146 real documents, 2026-08-23
 
-Release build, `documents/`, `Template::default()` (10pt base, 9/7/7pt floors, **9pt table comfort
-floor**, 0.25 image scale). Re-measured after T26b, as §9 requires.
+Release build, `documents/`, `Template::default()` (**12pt base**, 9/7/7pt floors, 9pt table
+comfort floor, 0.25 image scale). Re-measured after T30, as §9 requires.
+
+```
+146 converted, 146 valid PDFs, 29.7s
+ 93 flagged (64%)          (was 70, 48%)
+
+ 152  reflowed             (unchanged)
+ 122  shrunk to floor      (was 46)
+   0  rotated
+   2  unsupported construct
+   0  clipped
+```
+
+**Read the rise as reporting, not regression.** The 76 new shrinks are tables that already rendered
+at these sizes and were called clean, because the old 10pt base was itself unchosen. Every one of
+them renders **at least as large as it did**, since a table that fitted at 10pt shrinks to at least
+10pt when the base is 12. Reflow is unchanged at 152 — the comfort floor is absolute, so the set
+that cannot reach 9.0pt is the same set.
+
+**Shrink targets** — over half the new ones land at or above the size we used to ship as the base:
+
+```
+  9.0pt  27      10.5pt  21
+  9.5pt  19      11.0pt  17
+ 10.0pt  20      11.5pt  18
+```
+
+**Compromises per flagged document:**
+
+```
+  1: 39 docs     4:  6      8:  2     12:  1
+  2: 22          5:  2      9:  2     13:  2
+  3: 13          6:  1     10:  1     25:  1
+                 7:  1
+```
+
+**Overflow, by the oracle:** 423 tables can reflow, 152 do, **1 of those overflows** — a 2pt
+overhang in one document, unchanged from before T30 and still recorded as **F8**.
+
+### The previous baseline, 2026-08-22 — after T26b, before T30
 
 ```
 146 converted, 146 valid PDFs, 25.7s
@@ -158,22 +197,27 @@ The mechanism's failure modes are not crashes. They are *plausible-looking* outc
 
 ### R1 · Compromise inflation — the gate stops meaning anything · **LIVE**
 
-**48% of documents are flagged.** The design's own illustration is *"47 converted cleanly, 3 need
-your attention"* — roughly 6%. At one in two, a user learns to skip the list, and INV-5's promise
+**64% of documents are flagged.** The design's own illustration is *"47 converted cleanly, 3 need
+your attention"* — roughly 6%. At two in three, a user learns to skip the list, and INV-5's promise
 that the gate fires *where a decision was made* becomes technically true and practically useless.
 
-**Watch:** the flagged percentage. **It should fall as the ladder improves, not rise.**
+**Watch:** the flagged percentage. ~~It should fall as the ladder improves, not rise.~~
 
-> **Re-scoped 2026-08-23 by T30.** That instruction is wrong when the baseline is wrong. `base_size_pt`
-> was 10.0 for no recorded reason (**F10**), so *"fits at 10pt"* counted as clean while being a
-> silent concession against the 12pt the template is meant to render at.
+> **Re-scoped 2026-08-23 by T30, and the re-scope is now measured rather than predicted.**
+> "It should fall" is the wrong instruction when the baseline is wrong. `base_size_pt` was 10.0 for
+> no recorded reason (**F10**), so *"fits at 10pt"* counted as clean while being a silent concession
+> against the 12pt the template is meant to render at.
 >
-> **[measured]** at a 12pt base, element-level compromise rises 47% → 65% — and every affected
-> element renders **at least as large as it does today**, because a table that fits at 10pt shrinks
-> to at least 10pt. Nothing gets worse; the reporting gets honest.
+> **[measured]** at a 12pt base, flagged documents go **48% → 64%** (70 → 93 of 146) and shrinks go
+> 46 → 122. Every affected element renders **at least as large as it did**, because a table that
+> fitted at 10pt shrinks to at least 10pt. Nothing got worse; the reporting got honest.
 >
 > The goal is therefore **distance from optimal**, not the flagged count. The count is a usable proxy
-> only while the baseline is one nobody had to choose.
+> only while the baseline is one nobody had to choose — and it was not.
+>
+> R1's real content survives: two in three is still too many to be a useful gate. What changes is the
+> remedy. Lowering the count is no longer the win condition; **rendering closer to 12pt is**, and a
+> severity on Compromise (§8) is how the gate stops firing on an 11.5pt squeeze nobody would notice.
 
 ### R2 · The order of the rungs · **CLOSED 2026-08-22 by T26b**
 

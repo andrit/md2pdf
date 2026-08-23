@@ -20,5 +20,5 @@ image-scaled.md               2 elements   1 rotated, 1 scaled
 reflow-hostile.md             3 elements   1 reflowed
 reflow-instead-of-rotate.md   3 elements   1 reflowed
 reflow.md                     3 elements   1 reflowed
-shrink-slight.md              3 elements   1 shrunk
+shrink-to-comfort-floor.md    3 elements   1 shrunk
 unsupported.md                2 elements   2 unsupported

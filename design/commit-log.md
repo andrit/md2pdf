@@ -590,3 +590,49 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > Anticipated as doubt D2 of `plan-t29.md` (*"a break inserted mid-identifier is ugly"*), observed
   > in evidence, then fixed. Both goldens moved and were regenerated deliberately.
 - `<pending>` docs: plan T30 (12pt base); F3 is a missing comemo::evict, not a constraint
+
+- `<pending>` **feat: the base size is 12pt, and break limits come from the template** (T30, closes F10).
+
+  > **`base_size_pt: 10.0` was never chosen** — no doc comment, nothing in the repository recording a
+  > reason, carried forward from the font spike's *"10pt body"* specimen. The template is called
+  > `github-print`; GitHub's body text is 16px ≈ 12pt. It also put the measure at 96 characters per
+  > line, far outside the 45–75 band that reads comfortably; 12pt puts it at 80.
+  >
+  > **Flagged documents go 48% → 64%, and that is the point rather than a regression.** Shrinks go
+  > 46 → 122, reflow is unchanged at 152, corpus overflow is unchanged at 1. Every one of the 76 new
+  > shrinks renders **at least as large as it did** — a table that fitted at 10pt shrinks to at least
+  > 10pt — and over half land at 10.0–11.5pt, at or above the base we used to ship. What changed is
+  > that the shortfall is now reported. R1's watch instruction is re-scoped with it: the goal is
+  > distance from optimal, not the flagged count, which was only ever a proxy while the baseline was
+  > one nobody had to choose.
+  >
+  > **`CHARS_ACROSS = 96` is gone.** Its ponytail said *"upgrade: pass the Template into conversion"*
+  > and the ceiling had been reached — 96 is A4 at 10pt, so every break limit was 20% too generous
+  > the moment the base moved. `SourceContext` now carries the `Template`, and `Template::chars_in`
+  > answers for a given width rather than only the full line.
+  >
+  > **The oracle then caught a defect that had been green for eight commits.** `reflow-hostile.md`
+  > spilled 4pt at 12pt and not at 10pt, and the base size was not the cause: `break_limits` never
+  > charged a cell for its **inset**. It divided the characters that fit the full text width among
+  > the columns, while each cell also pays 5pt of padding per side — measured by rendering a
+  > one-column table and finding where the glyph ink starts. Twelve columns spend 120 of 483 points
+  > on inset, so the limit was a quarter too generous, and 10pt had the slack to hide it.
+  >
+  > The deduction happens **after** each column takes its share, not before. Pooling it first spreads
+  > the cost in proportion to weight and under-charges narrow columns — the F8 shape exactly: for
+  > `(1fr, 6fr)` the narrow column really holds 59pt (9 characters), and pooling would say 66pt (10).
+  >
+  > **The census did not move, and that is the finding.** No fixture changed rung. The ladder's
+  > chosen size is *absolute* — a table fits at the size it fits at, whichever base it started from —
+  > so the plan's prediction that fixtures would need re-tuning was wrong, and is superseded in place.
+  > What moved is what the names mean: 12 → 9 is a quarter off where 10 → 9 was a tenth, so
+  > `shrink-slight.md` becomes `shrink-to-comfort-floor.md`, the role it actually plays.
+  >
+  > All seven goldens regenerated — every rendering changes size, which is expected and deliberate.
+  > One unit test stopped pinning an exact run of broken text and now asserts the property it was
+  > written for (no separator is passed over), because the exact string encoded the old base.
+  >
+  > **Fourth defect of one shape in four tasks** (T29, T29b, T29c, T30): `convert` estimating layout
+  > arithmetic that `typeset` could measure exactly, each one found by rendering a page and counting
+  > pixels rather than by a test. Recorded as `plan-base-size.md` D5, with the operator's scoping
+  > decision — a 12-column table is not a case worth engineering for in a markdown converter.

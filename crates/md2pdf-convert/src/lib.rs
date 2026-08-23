@@ -29,7 +29,7 @@ pub mod parse;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use md2pdf_domain::{Compromise, Element};
+use md2pdf_domain::{Compromise, Element, Template};
 
 pub use images::{ImageProbe, NoImages};
 
@@ -56,6 +56,17 @@ pub struct SourceContext<'a> {
     /// scratch buffer, a test.
     pub source_dir: Option<&'a Path>,
     pub images: &'a dyn ImageProbe,
+    /// The Template the result will be rendered against.
+    ///
+    /// Conversion does not lay anything out, but it does decide *proportions* — which
+    /// table columns share the leftover width, and where a long run may wrap — because
+    /// that is the only place the cell text exists. Those decisions depend on how much
+    /// room the page has, so the alternative to carrying the template is hardcoding a
+    /// page geometry, which is what `CHARS_ACROSS = 96` silently did until 2026-08-23.
+    ///
+    /// Owned rather than borrowed so `none()` can exist without a static. Cloned once
+    /// per Source, against a probe that costs ~150ms.
+    pub template: Template,
 }
 
 impl SourceContext<'_> {
@@ -69,15 +80,27 @@ impl SourceContext<'_> {
         Self {
             source_dir: None,
             images: &NoImages,
+            template: Template::default(),
         }
     }
 }
 
 impl<'a> SourceContext<'a> {
     pub fn new(source_dir: &'a Path, images: &'a dyn ImageProbe) -> Self {
+        Self::with_template(source_dir, images, Template::default())
+    }
+
+    /// The same, against a template that is not the default — which is every template
+    /// once 3e loads them from disk.
+    pub fn with_template(
+        source_dir: &'a Path,
+        images: &'a dyn ImageProbe,
+        template: Template,
+    ) -> Self {
         Self {
             source_dir: Some(source_dir),
             images,
+            template,
         }
     }
 }

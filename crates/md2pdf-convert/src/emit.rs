@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use md2pdf_domain::{Compromise, CompromiseKind, Element, ElementClass, Markup};
+use md2pdf_domain::{Compromise, CompromiseKind, Element, ElementClass, Markup, Template};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Tag, TagEnd};
 
 use crate::escape::{escape, escape_string};
@@ -153,7 +153,7 @@ fn breakable_cells(
         pending: Vec::new(),
         images: ImageManifest::new(),
         in_header: false,
-        breakable: Some(break_limits(widths, columns)),
+        breakable: Some(break_limits(widths, columns, &ctx.template)),
     };
     em.sequence(&mut block.events.iter().peekable(), None);
     em.table.take().map(|(_, cells)| cells)
@@ -196,33 +196,56 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
     map
 }
 
-/// Roughly how many characters span the full text width at the base size.
-///
-/// ponytail: `convert` has no `Template`, so the page width cannot be known here — 96 is
-/// A4 minus margins at 10pt, measured. ceiling: a much narrower or wider template breaks
-/// the estimate. upgrade: pass the Template into conversion, or move break insertion
-/// into the typeset layer where the width is known.
-const CHARS_ACROSS: usize = 96;
-
 /// The longest run left alone **in each column**, from the same weights that size them.
 ///
 /// A single threshold per table was the previous rule, and it was wrong for the same
 /// reason equal `1fr` columns were: it assumes every column has the same room. Once the
 /// spec is deliberately lopsided — `(1fr, 1fr, 1fr, 6fr)` — a weight-1 column holds a
-/// ninth of the width, and a threshold computed as `96 / 4` lets a 20-character run sit
-/// in a column with space for eleven. Measured: that is what still ran off the page
-/// after T29b (**F8**).
+/// ninth of the width, and a threshold computed as a quarter of the line lets a
+/// 20-character run sit in a column with space for eleven. Measured: that is what still
+/// ran off the page after T29b (**F8**).
 ///
 /// So each column gets the threshold its own share implies. `fr` bounds the *table*;
 /// this is what bounds the *cell*.
-fn break_limits(widths: &[usize], columns: usize) -> Vec<usize> {
+///
+/// ## Two corrections from T30
+///
+/// The line width comes from the **Template** rather than a constant. It was 96 — A4 at
+/// a 10pt base — so every limit was 20% too generous the moment the base moved to 12pt.
+///
+/// And each column pays [`TABLE_INSET_PT`] out of **its own share**, not out of the
+/// table's width before it is shared. Deducting the inset first spreads it in proportion
+/// to weight, which under-charges exactly the narrow columns where overflow bites: for
+/// `(1fr, 6fr)` the pooled form leaves the narrow column 66pt when it really has 59pt —
+/// one character too many, which is the F8 shape all over again.
+fn break_limits(widths: &[usize], columns: usize, template: &Template) -> Vec<usize> {
     let weights = column_weights(widths, columns);
-    let total: usize = weights.iter().sum::<usize>().max(1);
+    let total = weights.iter().sum::<usize>().max(1) as f64;
     weights
         .iter()
-        .map(|w| (CHARS_ACROSS * w / total).clamp(6, 48))
+        .map(|w| {
+            let share_pt = template.available_pt() * *w as f64 / total;
+            let text_pt = share_pt - 2.0 * TABLE_INSET_PT;
+            // Four is the floor `break_word` counts to anyway; below it a limit shreds
+            // every word instead of the over-long ones. Forty-eight keeps the estimate
+            // from licensing an enormous run in a very wide column.
+            template.chars_in(text_pt).clamp(4, 48)
+        })
         .collect()
 }
+
+/// What a table cell loses to padding, on each side.
+///
+/// **[measured]** 2026-08-23 by rendering a one-column table and finding where the glyph
+/// ink begins: 5pt right of the border. It is Typst's default and the emitted `#table`
+/// does not override it, so `convert` — which writes that call — is where the assumption
+/// belongs.
+///
+/// It matters because it is charged **per column**: a twelve-column table spends 120 of
+/// its 483 points on inset, a quarter of the width, and a limit computed as though the
+/// whole width held text is a quarter too generous. That is what pushed
+/// `reflow-hostile.md` 4pt off the page at a 12pt base while passing at 10pt.
+const TABLE_INSET_PT: f64 = 5.0;
 
 /// The weight each column carries, shared by the column spec and the break limits so the
 /// two cannot disagree about how wide a column is meant to be.
@@ -728,6 +751,40 @@ mod tests {
     }
 
     #[test]
+    fn a_column_is_charged_its_own_inset_not_a_share_of_the_tables() {
+        // The T30 defect, pinned. Twelve equal columns spend 120 of 483 points on inset
+        // — a quarter of the width — and a limit computed as though the whole width held
+        // text let a 6-character header word sit in a column with room for five. It ran
+        // `reflow-hostile.md` 4pt off the page at a 12pt base, and passed at 10pt only
+        // because the smaller type left slack to absorb the error.
+        let t = Template::default();
+        assert_eq!(break_limits(&[30; 12], 12, &t), vec![5; 12]);
+
+        // And the deduction must happen *after* the share, or it is spread in proportion
+        // to weight and under-charges the narrow column — the F8 shape. The narrow
+        // column of a `(1fr, 6fr)` spec really holds 483/7 - 10 = 59pt, which is nine
+        // characters at a 12pt base; pooling the inset first would say ten.
+        assert_eq!(break_limits(&[4, 120], 2, &t)[0], 9);
+    }
+
+    #[test]
+    fn break_limits_follow_the_base_size() {
+        // The limits are not a constant. `CHARS_ACROSS = 96` was A4 at a 10pt base, and
+        // survived into a 12pt one where the true figure is 80 — every limit 20% too
+        // generous, silently. A wider column at a smaller base must hold more.
+        let big = Template::default();
+        let small = Template {
+            base_size_pt: 10.0,
+            ..Template::default()
+        };
+        let (a, b) = (
+            break_limits(&[30; 4], 4, &big)[0],
+            break_limits(&[30; 4], 4, &small)[0],
+        );
+        assert!(b > a, "smaller type must fit more characters: {b} vs {a}");
+    }
+
+    #[test]
     fn tables_carry_their_column_count_and_bold_headers() {
         let b = &bodies("| a | b |\n|---|---|\n| 1 | 2 |")[0];
         assert!(b.starts_with("#table(columns: 2,"), "wrong columns: {b}");
@@ -852,14 +909,24 @@ mod tests {
     fn breaks_land_on_separators_when_a_word_has_them() {
         // `user_organiz|ation_roles` was what counting produced (F9). A reader breaks
         // such a name after the underscore, and so should we.
+        //
+        // Asserted as a property rather than as one exact run of text. How much *else*
+        // gets broken depends on the column's threshold, which depends on the base size
+        // — at a 10pt base this column held 13 characters and `organization` survived
+        // whole; at 12pt it holds 11 and the fallback splits it. Pinning the whole run
+        // made this test a hostage to `base_size_pt` (T30). What must hold at any base
+        // is the F9 claim itself: **no separator is passed over.**
         let prose = "a considerably longer sentence that keeps going and going so that \
                      this column earns the lion's share of the available width";
         let a = alternate(&format!(
             "| table | purpose |\n|---|---|\n| user_organization_roles | {prose} |"
         ));
-        assert!(
-            a.contains(&format!("user\\_{ZWSP}organization\\_{ZWSP}roles")),
-            "breaks did not land on the separators: {a}"
+        // Both underscores, escaped by `escape` on the way out.
+        assert_eq!(a.matches("\\_").count(), 2, "the separators are gone: {a}");
+        assert_eq!(
+            a.matches(&format!("\\_{ZWSP}")).count(),
+            2,
+            "a separator was passed over: {a}"
         );
     }
 

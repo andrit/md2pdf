@@ -94,7 +94,7 @@ fn golden_at(markdown: &str, expected: Reduction) -> String {
 fn prose_is_unchanged() {
     assert_eq!(
         golden("# Title\n\nOrdinary prose with *emphasis*, **bold**, and `inline code`.\n"),
-        "195bdb4cc2c49230/18501"
+        "6ab935bbb504a328/18503"
     );
 }
 
@@ -108,7 +108,7 @@ fn structure_is_unchanged() {
              > a quote\n\n\
              | col | val |\n|---|---|\n| a | 1 |\n"
         ),
-        "b5079fca3099cde9/13378"
+        "4cdaa0d98803c043/13387"
     );
 }
 
@@ -119,7 +119,7 @@ fn code_and_escaping_are_unchanged() {
             "```rust\nfn main() { println!(\"hi\"); }\n```\n\n\
              Hostile text: #hash $dollar [bracket] @at -- ... done.\n"
         ),
-        "079a036da2b7c47b/11522"
+        "e1db4680e603a480/11532"
     );
 }
 
@@ -128,7 +128,7 @@ fn degraded_images_are_unchanged() {
     // The placeholder path — no filesystem, so every image degrades.
     assert_eq!(
         golden("![a diagram](chart.png)\n\n![remote](https://x.test/a.png)\n"),
-        "9db69bf5ba61b742/13170"
+        "7f0f589676488e39/13174"
     );
 }
 
@@ -153,7 +153,7 @@ fn the_escalation_ladder_is_unchanged() {
               | verylongvalue5 | verylongvalue6 | verylongvalue7 | verylongvalue8 |\n";
     let first = golden(md);
     assert_eq!(first, golden(md), "the ladder is not deterministic");
-    assert_eq!(first, "0c4234528981ce90/13648");
+    assert_eq!(first, "c4aa35e9a496befd/13643");
 }
 
 /// The reflow rung, which no golden covered until 2026-08-22.
@@ -170,7 +170,7 @@ fn a_reflowed_table_is_unchanged() {
         "| Column 0 | Column 1 | Column 2 | Column 3 | Column 4 | Column 5 |\n\
          |---|---|---|---|---|---|\n{row}{row}"
     );
-    assert_eq!(golden_at(&md, Reduction::Reflow), "2855730afa880e33/12918");
+    assert_eq!(golden_at(&md, Reduction::Reflow), "e62d77c673120aae/13252");
 }
 
 /// A **lopsided** reflow — one prose column, the rest narrow.
@@ -189,5 +189,5 @@ fn a_proportional_reflow_is_unchanged() {
         "| id | detail | pri | ok | notes |\n\
          |---|---|---|---|---|\n{row}{row}{row}"
     );
-    assert_eq!(golden_at(&md, Reduction::Reflow), "d6cc7a5c9cd96345/14918");
+    assert_eq!(golden_at(&md, Reduction::Reflow), "3dae198a3ce94f95/14925");
 }

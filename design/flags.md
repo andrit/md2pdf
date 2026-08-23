@@ -22,7 +22,15 @@ is a deeper analysis of one mechanism, and it stays there. This is everything el
 
 ## Open
 
-### F10 · `DEFECT` — the base size was never chosen
+### F10 · `DEFECT` — the base size was never chosen · **CLOSED 2026-08-23 (T30)**
+
+> **Closed.** The base is 12pt, with the reason in the type. `CHARS_ACROSS` is gone — break limits
+> now come from the Template, and from each column's own share *after* its own inset. Measured:
+> flagged 48% → 64%, shrinks 46 → 122, reflow unchanged at 152, corpus overflow unchanged at 1.
+> Nothing renders smaller than it did; the reporting became honest. **T26c is unblocked.**
+>
+> The consequences below were all worked through, and one prediction was wrong — fixture sizes did
+> *not* move, because the ladder's chosen size is absolute. See `plan-base-size.md` step 3.
 
 `Template::default()` sets `base_size_pt: 10.0`, and **[measured]** nothing in the repository records
 why. It appears in the font spike as a specimen setting — *"10pt body"* — and was carried forward as
@@ -48,7 +56,7 @@ documents converted "cleanly" at a size nobody chose.
 - **T26c cannot be settled first.** Choosing a comfort floor against a 10pt base is choosing it
   against the wrong target; the three pairs must be re-rendered at 12pt.
 
-**Tracked:** **T30**, and it comes before T26c.
+**Tracked:** **T30** — done.
 
 ### F1 · `INSTRUMENT` — no overflow oracle · **BUILT 2026-08-22 (T29)**
 
@@ -154,6 +162,7 @@ corpus measurement taken so far. Gitignore, delete, or commit.
 | T29 · break long runs | 4 | 55pt |
 | T29b · weighted `fr` columns | 4 | 9pt |
 | **T29c · per-column break limits** | **1** | **2pt** |
+| T30 · per-column inset | **1** | **2pt** |
 
 Each step was diagnosed rather than guessed, and each diagnosis contradicted the previous plan's
 expectation:

@@ -69,6 +69,18 @@ pub struct Template {
     pub page_width_pt: f64,
     pub page_height_pt: f64,
     pub margin_pt: f64,
+    /// Body text size — **the size this template is trying to achieve**, not a
+    /// starting point to be negotiated down from.
+    ///
+    /// 12pt, matching GitHub's 16px body, because `github-print` exists to reproduce
+    /// what GitHub renders and type size is the first thing a reader notices. It also
+    /// puts the measure at ~80 characters per line against A4 with these margins; 10pt
+    /// gave 96, well outside the 45-75 band that reads comfortably.
+    ///
+    /// Every reduction the ladder makes is a departure from this number, and the
+    /// Diagnostic reports the distance. That only means anything if the number is
+    /// chosen: it was 10.0 for no recorded reason until 2026-08-23, so *"fits at 10pt"*
+    /// counted as clean while being a silent concession. See `design/plan-base-size.md`.
     pub base_size_pt: f64,
     pub floors: Floors,
     pub font_body: String,
@@ -82,7 +94,7 @@ impl Default for Template {
             page_width_pt: 595.0, // A4
             page_height_pt: 842.0,
             margin_pt: 56.0,
-            base_size_pt: 10.0,
+            base_size_pt: 12.0,
             floors: Floors::default(),
             font_body: "Source Sans 3".into(),
             font_mono: "JetBrains Mono".into(),
@@ -97,6 +109,26 @@ impl Template {
     /// identical decisions. See `design/spike-typst-measure-findings.md`.
     pub fn available_pt(&self) -> f64 {
         self.page_width_pt - 2.0 * self.margin_pt
+    }
+
+    /// Roughly how many characters fit in `width_pt` at the base size.
+    ///
+    /// An estimate, and deliberately a cheap one: it exists so `md2pdf-convert` can size
+    /// break opportunities without measuring, which would mean linking Typst. The ratio
+    /// is **[measured]** — Source Sans 3 averages about half the point size per
+    /// character, so the full 483pt at 10pt held ~96 characters and at 12pt holds ~80.
+    ///
+    /// Takes a width rather than answering only for the full line, because the caller
+    /// that needs it is sizing a **table cell**, which gets a share of the width and
+    /// then pays inset out of that share. Answering only `available_pt()` invited the
+    /// caller to divide, and dividing is where the inset gets lost.
+    ///
+    /// Lives here rather than in `convert` because it is a fact about the template's
+    /// geometry. It was a hardcoded `96` until 2026-08-23, which silently encoded "A4 at
+    /// 10pt" into the conversion layer and was wrong at any other size.
+    pub fn chars_in(&self, width_pt: f64) -> usize {
+        let per_char = self.base_size_pt * 0.503;
+        (width_pt.max(0.0) / per_char) as usize
     }
 
     /// Available width once the page is flipped — what a rotated Element is
