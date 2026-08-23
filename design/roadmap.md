@@ -84,7 +84,8 @@ Detail lives in the phase plans; this is the index.
 | T26a2 | **Proportional reflow alternate** — `auto` for narrow columns, `1fr` for the widest | 3d | ✅ staged |
 | T26b | **Ladder order** — 9pt comfort floor, reflow before rotation (O2a) *(closes R2)* | 3d | ✅ staged |
 | T29 | Break long runs in the alternate; **build the overflow oracle** (F1) | 3d | ◐ **staged — partial, 7 → 4** |
-| T29b | **Four tables still overflow** *(F8)* — diagnose before fixing; two candidate mechanisms | 3d | ☐ |
+| T29b | Weighted `fr` columns — diagnosed F8 as `auto` refusing to shrink | 3d | ◐ **staged — severity 6× down, count still 4** |
+| T29c | Per-column break limits, derived from column weight *(closes F8?)* | 3d | ☐ **in progress** |
 | T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ |
 | T26c | Floors by eye — the 9pt comfort floor is a starting point, not a measurement | 3d | ☐ needs your judgment |
 

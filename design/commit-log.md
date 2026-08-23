@@ -483,3 +483,40 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Also flagged: **F7** `DEBT`, zero-width spaces reach the PDF text layer, so a path copied out of a
   > reflowed table pastes with invisible characters in it.
+
+- `<pending>` **fix(convert): weighted fractional columns in the reflow alternate** (T29b).
+
+  > **Diagnosed before fixing**, and the diagnosis was the work. All four tables still running off
+  > the page shared one shape: several `auto` columns and a single `1fr`. **`auto` in Typst means
+  > size to content and do not shrink**, so the autos summed past the page and the lone `1fr` was
+  > left with negative space. Neither candidate mechanism written down in F8 was quite right — it was
+  > not that runs fell under the break threshold, and not fragmented text events.
+  >
+  > Fractional columns **divide** the width available, so a table of them cannot exceed it — the
+  > guarantee `Reflow` needs to sit one rung before `Clip`. Weighting them keeps the proportionality
+  > `auto` was there to provide: `(1fr, 1fr, 1fr, 6fr)` rather than `(auto, auto, auto, 1fr)`.
+  > Verified on all four failing tables, at two weight scales, before any of it was written.
+  >
+  > **Third design for this spec, and each failure explains the next** — recorded in the doc comment
+  > so the code does not read as arbitrary. Equal `1fr` gave "P1" a paragraph's width; `auto` plus
+  > `1fr` fixed the proportions and broke the fitting guarantee; weighted `fr` is proportional *and*
+  > bounded.
+  >
+  > **Improvement, stated honestly: severity fell about 6× — 3/47/53/55pt down to 9pt and 5pt — and
+  > the count did not move. Still 4 of 152.** One document is new to the list, so something crossed
+  > the threshold the wrong way while others improved, and that is not yet explained. F8 stays open.
+  >
+  > The residual has a different cause, now identified: **`fr` bounds the table, not the cell.** A
+  > 20-character unbreakable run in a column with a ~54pt share still spills, because the break
+  > threshold is uniform while the shares are deliberately unequal. T29c derives each column's limit
+  > from its weight.
+  >
+  > **No golden moved, and that was the third instance of the same gap.** Both ladder goldens hold
+  > *uniform* tables, where every equal-share spec renders identically — `(1fr × 6)` and `(6fr × 6)`
+  > are the same layout. So neither noticed three successive changes to the thing they were assumed
+  > to cover. Added `a_proportional_reflow_is_unchanged`, lopsided by construction, which moves when
+  > the weighting does.
+  >
+  > Five tests were rewritten rather than renumbered: they pinned the `auto`/`1fr` design. One is now
+  > `every_column_is_fractional_so_the_table_cannot_exceed_the_page`, which asserts the invariant
+  > instead of the arrangement, and fails if an `auto` column ever creeps back.

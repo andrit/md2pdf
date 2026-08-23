@@ -260,28 +260,35 @@ fn offer_breaks(text: &str, limit: usize) -> String {
 /// widest column in the same table. Relative rather than absolute, because the corpus
 /// offers no natural cut: per-column max cell length runs p10 = 8, p50 = 29, p90 = 84
 /// characters across 1215 columns, a smooth spread. See `design/plan-reflow-columns.md`.
-const SLACK_SHARE: (usize, usize) = (1, 2);
+/// The weight given to the widest column. Narrow ones get a proportional share of this,
+/// never less than 1.
+///
+/// Small on purpose: the spec is meant to be readable in a diff and in the census, and
+/// finer gradations than sixths make no visible difference at A4.
+const WIDEST_WEIGHT: usize = 6;
 
-/// Build the reflow alternate's column spec: `auto` for columns that size to their
-/// content, `1fr` for the ones that absorb what is left.
+/// Build the reflow alternate's column spec: **weighted fractional columns**, in
+/// proportion to how much text each column holds.
 ///
-/// Equal `1fr` everywhere — what this replaced — gives a column holding "P1" the same
-/// width as one holding a paragraph, which is why deep shrinking beat reflow on every
-/// table the comparison sheets rendered.
+/// Two failed designs preceded this, and both failures are the reason for the shape:
 ///
-/// The widest column always qualifies, so at least one column always absorbs the slack
-/// and the alternate never collapses into the content-sized body it exists to replace.
+/// 1. **Equal `1fr` everywhere** gave a column holding "P1" the same width as one
+///    holding a paragraph. Measured against real tables, deep shrinking read better than
+///    that — which is what stalled the whole reordering question (T26a2).
+/// 2. **`auto` for narrow columns, `1fr` for wide ones** fixed the proportions and broke
+///    the fitting guarantee: `auto` in Typst means *size to content and do not shrink*,
+///    so several near-threshold columns sum past the page and the single `1fr` is left
+///    with negative space. Four real tables ran off the page that way (F8).
+///
+/// Fractional columns **divide** the width available, so the total can never exceed it —
+/// that is the guarantee `Reflow` needs to sit where it does, one rung before `Clip`.
+/// Weighting them keeps the proportionality that `auto` was there to provide.
 fn column_spec(columns: usize, widths: &[usize]) -> String {
-    let widest = widths.iter().copied().max().unwrap_or(0);
+    let widest = widths.iter().copied().max().unwrap_or(0).max(1);
     (0..columns)
         .map(|i| {
             let w = widths.get(i).copied().unwrap_or(0);
-            // `w / widest >= 1/2`, without floating point or division by zero.
-            if widest == 0 || w * SLACK_SHARE.1 >= widest * SLACK_SHARE.0 {
-                "1fr"
-            } else {
-                "auto"
-            }
+            format!("{}fr", (w * WIDEST_WEIGHT / widest).max(1))
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -692,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn narrow_columns_size_to_content_and_wide_ones_share_the_slack() {
+    fn column_widths_are_proportional_to_their_content() {
         // "P1" must not be given the same width as a paragraph — the defect that made
         // deep shrinking beat reflow on every real table. See plan-reflow-columns.md.
         let a = alternate(
@@ -700,13 +707,13 @@ mod tests {
              | E01 | a considerably longer sentence that has to wrap somewhere | P1 |",
         );
         assert!(
-            a.starts_with("#table(columns: (auto, 1fr, auto),"),
+            a.starts_with("#table(columns: (1fr, 6fr, 1fr),"),
             "wrong column spec: {a}"
         );
     }
 
     #[test]
-    fn two_wide_columns_both_share_the_slack() {
+    fn two_wide_columns_both_get_the_larger_share() {
         // The rule is relative, so "widest column only" is not enough: a table with two
         // prose columns needs both to absorb, or the second sizes to its full content.
         let a = alternate(
@@ -714,7 +721,7 @@ mod tests {
              | E1 | a reasonably long sentence here | another reasonably long one too |",
         );
         assert!(
-            a.starts_with("#table(columns: (auto, 1fr, 1fr),"),
+            a.starts_with("#table(columns: (1fr, 6fr, 6fr),"),
             "wrong column spec: {a}"
         );
     }
@@ -725,22 +732,25 @@ mod tests {
         // the alternate must still fill the width rather than collapsing to the body.
         let a = alternate("| aaa | bbb |\n|---|---|\n| ccc | ddd |");
         assert!(
-            a.starts_with("#table(columns: (1fr, 1fr),"),
+            a.starts_with("#table(columns: (6fr, 6fr),"),
             "wrong column spec: {a}"
         );
     }
 
     #[test]
-    fn at_least_one_column_always_absorbs_the_slack() {
-        // Otherwise the alternate is an all-`auto` table — which is the body it exists
-        // to replace, and would silently stop reflowing anything.
+    fn every_column_is_fractional_so_the_table_cannot_exceed_the_page() {
+        // The guarantee `Reflow` rests on, and the one an `auto` column broke: fr
+        // columns divide the width available, so the total can never exceed it. Four
+        // real tables ran off the page when narrow columns were `auto` (F8).
         for md in [
             "| a |\n|---|\n| b |",
             "| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |",
             "| tiny | enormously long cell content goes here |\n|---|---|\n| x | y |",
         ] {
             let a = alternate(md);
-            assert!(a.contains("1fr"), "no column absorbs the slack: {a}");
+            let spec = a.split("), ").next().unwrap_or("");
+            assert!(!spec.contains("auto"), "an auto column crept back in: {a}");
+            assert!(spec.contains("fr"), "no fractional column: {a}");
         }
     }
 
@@ -760,9 +770,14 @@ mod tests {
             .map(|m| m.as_str().split("), ").next().unwrap_or("").to_string())
             .collect();
         assert_eq!(specs.len(), 2, "expected two tables: {specs:?}");
-        assert!(specs[0].contains("auto"), "first table: {specs:?}");
+        // The first table is lopsided, the second uniform. If widths leaked between
+        // them the second would inherit the first's skew.
         assert!(
-            !specs[1].contains("auto"),
+            specs[0].contains("6fr") && specs[0].contains("1fr"),
+            "first: {specs:?}"
+        );
+        assert!(
+            !specs[1].contains("1fr"),
             "second table inherited the first's widths: {specs:?}"
         );
     }

@@ -96,35 +96,30 @@ corpus measurement taken so far. Gitignore, delete, or commit.
 
 **Tracked:** roadmap, *Decisions open for the operator*.
 
-### F8 · `DEFECT` — four tables still run off the page after T29
+### F8 · `DEFECT` — four tables still run off the page · **REDUCED, not closed**
 
-**T29 reduced overflow; it did not remove it.** Measured under the ladder's own decisions, 4 of the
-elements it reflows still spill past the right margin:
+| | count | spills |
+|---|---|---|
+| after T29 (breaks) | 4 of 152 | 3, 47, 53, 55pt |
+| after T29b (weighted `fr`) | **4 of 152** | 9pt, 5pt, + 2 not captured |
 
-```
-   3.0pt  skill-extraction-guide.md
-  47.0pt  skill-extraction-guide.md
-  53.0pt  support-audit.md
-  55.0pt  design__task-flow.md      (in the forced-reflow run)
-```
+**Severity down roughly 6×; the count did not move.** One document is new to the list
+(`26-rag-document-browser.md`), so at least one table crossed the threshold in the wrong direction
+while others improved — unexplained.
 
-Without T29 the same corpus would have had **7** — the 4 that already overflowed before T26b plus
-the 3 T26b moved onto the rung. So the fix prevented the new breakage and left the original.
+**Diagnosed** (T29b): `auto` columns size to content and refuse to shrink, so several of them summed
+past the page while the single `1fr` was left with negative space. Replaced by weighted fractional
+columns, which divide the width available and therefore cannot exceed it.
 
-**The cause is not the break threshold**, which was the obvious guess and is wrong: every long run in
-these documents *exceeds* its limit and does get breaks — `completeSubmission(existingId)` is 30
-against a limit of 24, `revision_requested` 20 against 13.
+**The residual has a different cause, now identified:** `fr` bounds the **table**, not the **cell**.
+A 20-character unbreakable run in a column whose share is ~54pt still spills, because the break
+threshold is uniform (`96 / columns`) while the shares are deliberately unequal — a weight-1 column
+gets far less room than that threshold assumes.
 
-**Hypothesis, untested:** `auto` columns cannot shrink below their content, and content *just under*
-the break threshold stays unbreakable — so several near-threshold cells in auto columns can sum past
-the width with no `1fr` able to absorb it. If so the fix is about which columns get `auto`, not about
-breaking, and it belongs with `column_spec` rather than `offer_breaks`.
+**Next:** derive each column's break limit from its weight, which `emit` already has.
 
-A second candidate: a cell's text arrives as several `Event::Text` fragments (split around inline
-code or a link), so a long run is never seen as long by `offer_breaks`, which works per event.
-
-**Tracked:** **T29b**. Diagnose before fixing — two plausible mechanisms, and the last three tasks
-each turned on a guess that measurement contradicted.
+**Caveat on the numbers:** the harness's progress message interleaves with the output and ate two of
+the four lines, so two magnitudes are known and two are not. The count is reliable; the list is not.
 
 ### F7 · `DEBT` — zero-width spaces reach the PDF text layer
 

@@ -172,3 +172,22 @@ fn a_reflowed_table_is_unchanged() {
     );
     assert_eq!(golden_at(&md, Reduction::Reflow), "b26ff54e8966a7ae/13462");
 }
+
+/// A **lopsided** reflow — one prose column, the rest narrow.
+///
+/// The other two ladder goldens hold uniform tables, where every column spec that gives
+/// equal shares renders identically: `(1fr × 6)` and `(6fr × 6)` are the same layout. So
+/// neither of them moved when the alternate changed from equal `1fr`, to `auto` plus
+/// `1fr`, to weighted `fr` — three changes to the thing they were assumed to cover.
+///
+/// This one is proportional by construction, so it moves when the weighting does.
+#[test]
+fn a_proportional_reflow_is_unchanged() {
+    let prose = "a considerably longer sentence that has to wrap somewhere or other";
+    let row = format!("| E01 | {prose} | P1 | yes | {prose} |\n");
+    let md = format!(
+        "| id | detail | pri | ok | notes |\n\
+         |---|---|---|---|---|\n{row}{row}{row}"
+    );
+    assert_eq!(golden_at(&md, Reduction::Reflow), "d6cc7a5c9cd96345/14918");
+}
