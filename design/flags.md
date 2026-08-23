@@ -22,6 +22,34 @@ is a deeper analysis of one mechanism, and it stays there. This is everything el
 
 ## Open
 
+### F10 · `DEFECT` — the base size was never chosen
+
+`Template::default()` sets `base_size_pt: 10.0`, and **[measured]** nothing in the repository records
+why. It appears in the font spike as a specimen setting — *"10pt body"* — and was carried forward as
+though it were a decision.
+
+Two things follow, and the second is the serious one.
+
+**The template is called `github-print` and GitHub's body text is 16px ≈ 12pt.** The fidelity target
+and the base disagree, in the one dimension a reader notices first.
+
+**Every Compromise has been measured against a baseline that is itself a compromise.** The whole
+mechanism reports departures from `base_size_pt`, and treats sitting *at* it as clean. If the optimal
+body size is 12pt, then rendering at 10pt is a concession that no Diagnostic has ever recorded — 146
+documents converted "cleanly" at a size nobody chose.
+
+**Consequences to work through**, not yet measured:
+
+- The shrink distribution and the flagged percentage will both move. More content will not fit at
+  12pt, so **R1 (48% flagged) probably gets worse before it gets better** — and that is the honest
+  number, not a regression.
+- `CHARS_ACROSS = 96` in `emit.rs` is *"A4 minus margins at 10pt"* — a hardcoded constant that is
+  wrong at any other base. It should be derived, or the ponytail's ceiling has been reached.
+- **T26c cannot be settled first.** Choosing a comfort floor against a 10pt base is choosing it
+  against the wrong target; the three pairs must be re-rendered at 12pt.
+
+**Tracked:** **T30**, and it comes before T26c.
+
 ### F1 · `INSTRUMENT` — no overflow oracle · **BUILT 2026-08-22 (T29)**
 
 > Built as `md2pdf-engine/tests/walking_skeleton/overflow.rs`. **It found a real overflow in a
@@ -123,6 +151,26 @@ diagnosed — 2pt is one character's overhang and the next step down starts trad
 readability, so it is recorded rather than chased.
 
 **Tracked:** open, unscheduled. Worth revisiting only if the count grows.
+
+### F9 · `DEBT` — breaks land mid-identifier · **FIXED 2026-08-23**
+
+**Observed** in the T26c pairs (`design/evidence/t26c/pair-8-5pt-p0.png`): a reflowed narrow column
+renders `user_organiz / ation_roles` and `submissions. / content_flag / s`. T29c's break limits
+insert an opportunity every *N* characters, so they land wherever the count falls rather than
+anywhere meaningful.
+
+Anticipated as doubt D2 in `plan-t29.md` — *"a break inserted mid-identifier is ugly"* — and now
+seen rather than supposed. It is a readability cost paid by the fix that stopped tables running off
+the page, so it is a trade rather than a regression.
+
+**Upgrade, and it looks like a good one:** break at existing separators first — `_`, `.`, `/`, `-`
+— and only fall back to counting when a run has none. `user_organization_roles` would wrap as
+`user_ / organization_ / roles`, which is how a reader would break it anyway.
+
+**Fixed.** Breaks now go after `_ . / - : \\ ,` first, and fall back to counting only where a run has
+none. `user_ / organization_ / roles`, `submissions. / content_ / flags`. The counting fallback also
+moved from `limit / 2` to `limit` — half a column's width chopped words that would have fitted.
+Overflow stayed at 1 of 152, so the looser breaking cost nothing.
 
 ### F7 · `DEBT` — zero-width spaces reach the PDF text layer
 

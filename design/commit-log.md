@@ -569,4 +569,23 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Cheap now, expensive later, which is the gate test in `invariants.md`: one grep before the
   > adapter exists, versus cleaning up whatever leaked against a working UI nobody wants to break.
-- `<pending>` docs: plan the floors (T26c) — four of five have no observable effect
+- `5c5088d` docs: plan the floors (T26c) — four of five have no observable effect
+
+- `<pending>` **fix(convert): break long runs at separators, not by counting** (F9).
+
+  > `user_organiz | ation_roles` and `submissions. | content_flag | s` — visible in the T26c pairs,
+  > and the main reason the reflowed rendering lost the comparison on sight rather than on substance.
+  >
+  > Breaks now go after `_ . / - : \ ,` first, falling back to counting only where a run has none,
+  > which is how a reader would break the name anyway: `user_ / organization_ / roles`.
+  >
+  > The counting fallback also moved from `limit / 2` to `limit`. Half a column's width chopped words
+  > that would have fitted whole — the first attempt still produced `user_organi|zation_roles`
+  > *because* the fallback fired between separators. `limit` is the column's actual character
+  > capacity, so counting now breaks exactly when the line is full.
+  >
+  > **Overflow held at 1 of 152**, checked with the oracle rather than assumed — looser breaking is
+  > the kind of change that could have quietly let a table back off the page.
+  >
+  > Anticipated as doubt D2 of `plan-t29.md` (*"a break inserted mid-identifier is ugly"*), observed
+  > in evidence, then fixed. Both goldens moved and were regenerated deliberately.

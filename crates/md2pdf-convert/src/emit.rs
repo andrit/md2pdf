@@ -250,30 +250,54 @@ const BREAK: char = '\u{200b}';
 /// Applied **before** escaping, so a break can never land inside an escape sequence.
 /// `U+200B` is not ASCII punctuation, so `escape` passes it through untouched.
 fn offer_breaks(text: &str, limit: usize) -> String {
-    let every = (limit / 2).max(4);
     let mut out = String::with_capacity(text.len());
-    let mut run = 0usize;
-    // Measured over the whole run first: a short word must not be split just because it
-    // follows a long one.
+    // Judged per word: a short one must not be split just because it follows a long one.
     for word in text.split_inclusive(char::is_whitespace) {
-        let trimmed = word.trim_end();
-        if trimmed.chars().count() <= limit {
+        if word.trim_end().chars().count() <= limit {
             out.push_str(word);
-            continue;
-        }
-        for c in word.chars() {
-            if c.is_whitespace() {
-                run = 0;
-            } else {
-                if run > 0 && run.is_multiple_of(every) {
-                    out.push(BREAK);
-                }
-                run += 1;
-            }
-            out.push(c);
+        } else {
+            break_word(word, limit, &mut out);
         }
     }
     out
+}
+
+/// Characters a reader would already break a long token at.
+///
+/// Breaking after one of these gives `user_ / organization_ / roles`, which is how the
+/// name reads anyway. Counting characters instead gave `user_organiz / ation_roles`,
+/// visible in `design/evidence/t26c/pair-8-5pt-p0.png` and recorded as flag **F9**.
+const SEPARATORS: [char; 7] = ['_', '.', '/', '-', ':', '\\', ','];
+
+/// Insert break opportunities into one over-long word.
+///
+/// Separators first, counting only as a fallback — an identifier or a path almost always
+/// has one, and a hash or a long word does not.
+fn break_word(word: &str, limit: usize, out: &mut String) {
+    // A full column's worth, not half of one. `limit` is how many characters the column
+    // has room for, so counting to it breaks exactly when the line is full — while
+    // anything shorter chops words that would have fitted. At `limit / 2` this produced
+    // `user_organi|zation_roles` even though `organization_` fits on its own.
+    let every = limit.max(4);
+    let mut run = 0usize;
+    let mut chars = word.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c.is_whitespace() {
+            run = 0;
+            continue;
+        }
+        run += 1;
+        // Never offer a break at the very end of a word: it can only produce a line
+        // ending one character early.
+        if chars.peek().is_none_or(|n| n.is_whitespace()) {
+            continue;
+        }
+        if SEPARATORS.contains(&c) || run >= every {
+            out.push(BREAK);
+            run = 0;
+        }
+    }
 }
 
 /// A column shares the leftover width when it is at least this fraction as wide as the
@@ -822,6 +846,33 @@ mod tests {
              | `completeSubmissionWithAVeryLongIdentifier` | {prose} |"
         ));
         assert!(a.contains(ZWSP), "no break offered in the alternate: {a}");
+    }
+
+    #[test]
+    fn breaks_land_on_separators_when_a_word_has_them() {
+        // `user_organiz|ation_roles` was what counting produced (F9). A reader breaks
+        // such a name after the underscore, and so should we.
+        let prose = "a considerably longer sentence that keeps going and going so that \
+                     this column earns the lion's share of the available width";
+        let a = alternate(&format!(
+            "| table | purpose |\n|---|---|\n| user_organization_roles | {prose} |"
+        ));
+        assert!(
+            a.contains(&format!("user\\_{ZWSP}organization\\_{ZWSP}roles")),
+            "breaks did not land on the separators: {a}"
+        );
+    }
+
+    #[test]
+    fn a_word_with_no_separator_still_gets_broken() {
+        // The fallback. A hash or a run-on identifier has nothing to break at, and must
+        // still be given somewhere to wrap or the table runs off the page.
+        let prose = "a considerably longer sentence that keeps going and going so that \
+                     this column earns the lion's share of the available width";
+        let a = alternate(&format!(
+            "| hash | purpose |\n|---|---|\n| deadbeefcafef00dbaadf00ddefaced1 | {prose} |"
+        ));
+        assert!(a.contains(ZWSP), "no fallback break offered: {a}");
     }
 
     #[test]
