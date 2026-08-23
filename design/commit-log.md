@@ -569,3 +569,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Cheap now, expensive later, which is the gate test in `invariants.md`: one grep before the
   > adapter exists, versus cleaning up whatever leaked against a working UI nobody wants to break.
+- `<pending>` docs: plan the floors (T26c) — four of five have no observable effect
