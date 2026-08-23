@@ -96,30 +96,33 @@ corpus measurement taken so far. Gitignore, delete, or commit.
 
 **Tracked:** roadmap, *Decisions open for the operator*.
 
-### F8 · `DEFECT` — four tables still run off the page · **REDUCED, not closed**
+### F8 · `DEFECT` — tables that run off the page · **1 left, from 7**
 
-| | count | spills |
+| | count | worst spill |
 |---|---|---|
-| after T29 (breaks) | 4 of 152 | 3, 47, 53, 55pt |
-| after T29b (weighted `fr`) | **4 of 152** | 9pt, 5pt, + 2 not captured |
+| before T29 | 7 of 152 | — |
+| T29 · break long runs | 4 | 55pt |
+| T29b · weighted `fr` columns | 4 | 9pt |
+| **T29c · per-column break limits** | **1** | **2pt** |
 
-**Severity down roughly 6×; the count did not move.** One document is new to the list
-(`26-rag-document-browser.md`), so at least one table crossed the threshold in the wrong direction
-while others improved — unexplained.
+Each step was diagnosed rather than guessed, and each diagnosis contradicted the previous plan's
+expectation:
 
-**Diagnosed** (T29b): `auto` columns size to content and refuse to shrink, so several of them summed
-past the page while the single `1fr` was left with negative space. Replaced by weighted fractional
-columns, which divide the width available and therefore cannot exceed it.
+- **T29** — long runs cannot wrap, so give them break opportunities. Fixed the cases above the
+  threshold; the threshold itself turned out to be the next problem.
+- **T29b** — `auto` columns *size to content and refuse to shrink*, so several summed past the page
+  while the lone `1fr` took negative space. Replaced with weighted fractional columns, which divide
+  the width and therefore cannot exceed it.
+- **T29c** — `fr` bounds the *table*, not the *cell*. A single break threshold assumed every column
+  had equal room, which stopped being true the moment the spec became deliberately lopsided. Each
+  column's limit now comes from its own weight.
 
-**The residual has a different cause, now identified:** `fr` bounds the **table**, not the **cell**.
-A 20-character unbreakable run in a column whose share is ~54pt still spills, because the break
-threshold is uniform (`96 / columns`) while the shares are deliberately unequal — a weight-1 column
-gets far less room than that threshold assumes.
+**The remaining one:** `CLAUDE.md`, 2pt. **[assumed]** the break limit clamps at a floor of 6
+characters, so a column with a very small share still cannot break its content finely enough. Not
+diagnosed — 2pt is one character's overhang and the next step down starts trading against
+readability, so it is recorded rather than chased.
 
-**Next:** derive each column's break limit from its weight, which `emit` already has.
-
-**Caveat on the numbers:** the harness's progress message interleaves with the output and ate two of
-the four lines, so two magnitudes are known and two are not. The count is reliable; the list is not.
+**Tracked:** open, unscheduled. Worth revisiting only if the count grows.
 
 ### F7 · `DEBT` — zero-width spaces reach the PDF text layer
 

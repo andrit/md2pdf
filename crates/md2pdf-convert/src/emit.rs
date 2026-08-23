@@ -105,7 +105,8 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
                 // Re-running the same code path rather than rewriting the first pass's
                 // markup: both forms then cannot drift, and nothing has to parse Typst
                 // to find where a break may safely go.
-                let cells = breakable_cells(block, ctx, &footnotes, columns).unwrap_or_default();
+                let cells = breakable_cells(block, ctx, &footnotes, columns, &em.cell_widths)
+                    .unwrap_or_default();
                 Element::with_reflow(
                     order,
                     block.class,
@@ -141,6 +142,7 @@ fn breakable_cells(
     ctx: &SourceContext,
     footnotes: &HashMap<String, String>,
     columns: usize,
+    widths: &[usize],
 ) -> Option<String> {
     let mut em = Emitter {
         ctx,
@@ -151,7 +153,7 @@ fn breakable_cells(
         pending: Vec::new(),
         images: ImageManifest::new(),
         in_header: false,
-        breakable: Some(unbreakable_run(columns)),
+        breakable: Some(break_limits(widths, columns)),
     };
     em.sequence(&mut block.events.iter().peekable(), None);
     em.table.take().map(|(_, cells)| cells)
@@ -202,15 +204,33 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
 /// into the typeset layer where the width is known.
 const CHARS_ACROSS: usize = 96;
 
-/// The longest run left alone, given how many columns share the width.
+/// The longest run left alone **in each column**, from the same weights that size them.
 ///
-/// Relative to the column count rather than fixed: a 20-character word has room to spare
-/// in a two-column table and none in a nine-column one, so a single threshold either
-/// splits ordinary words needlessly or lets narrow columns overflow. A flat 24 did the
-/// second — `below-comfort-reflows.md` spilled 21pt past the margin, caught by the
-/// overflow oracle on its first run.
-fn unbreakable_run(columns: usize) -> usize {
-    (CHARS_ACROSS / columns.max(1)).clamp(8, 48)
+/// A single threshold per table was the previous rule, and it was wrong for the same
+/// reason equal `1fr` columns were: it assumes every column has the same room. Once the
+/// spec is deliberately lopsided — `(1fr, 1fr, 1fr, 6fr)` — a weight-1 column holds a
+/// ninth of the width, and a threshold computed as `96 / 4` lets a 20-character run sit
+/// in a column with space for eleven. Measured: that is what still ran off the page
+/// after T29b (**F8**).
+///
+/// So each column gets the threshold its own share implies. `fr` bounds the *table*;
+/// this is what bounds the *cell*.
+fn break_limits(widths: &[usize], columns: usize) -> Vec<usize> {
+    let weights = column_weights(widths, columns);
+    let total: usize = weights.iter().sum::<usize>().max(1);
+    weights
+        .iter()
+        .map(|w| (CHARS_ACROSS * w / total).clamp(6, 48))
+        .collect()
+}
+
+/// The weight each column carries, shared by the column spec and the break limits so the
+/// two cannot disagree about how wide a column is meant to be.
+fn column_weights(widths: &[usize], columns: usize) -> Vec<usize> {
+    let widest = widths.iter().copied().max().unwrap_or(0).max(1);
+    (0..columns)
+        .map(|i| (widths.get(i).copied().unwrap_or(0) * WIDEST_WEIGHT / widest).max(1))
+        .collect()
 }
 
 /// Zero-width space — invisible, and a place Typst may wrap.
@@ -284,12 +304,9 @@ const WIDEST_WEIGHT: usize = 6;
 /// that is the guarantee `Reflow` needs to sit where it does, one rung before `Clip`.
 /// Weighting them keeps the proportionality that `auto` was there to provide.
 fn column_spec(columns: usize, widths: &[usize]) -> String {
-    let widest = widths.iter().copied().max().unwrap_or(0).max(1);
-    (0..columns)
-        .map(|i| {
-            let w = widths.get(i).copied().unwrap_or(0);
-            format!("{}fr", (w * WIDEST_WEIGHT / widest).max(1))
-        })
+    column_weights(widths, columns)
+        .iter()
+        .map(|w| format!("{w}fr"))
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -321,14 +338,19 @@ struct Emitter<'m> {
     /// alternate. The body must keep its runs unbroken: its natural width is what the
     /// probe measures to choose a rung, and a body that could wrap mid-token would
     /// measure narrow and be given the wrong decision.
-    breakable: Option<usize>,
+    breakable: Option<Vec<usize>>,
 }
 
 impl Emitter<'_> {
     /// Break long runs, but only when emitting the alternate.
     fn maybe_break<'t>(&self, text: &'t str) -> std::borrow::Cow<'t, str> {
-        match self.breakable {
-            Some(limit) => std::borrow::Cow::Owned(offer_breaks(text, limit)),
+        match &self.breakable {
+            Some(limits) if !limits.is_empty() => {
+                // Which column this cell sits in decides how hard to break.
+                let limit = limits[self.cell_index % limits.len()];
+                std::borrow::Cow::Owned(offer_breaks(text, limit))
+            }
+            Some(_) => std::borrow::Cow::Borrowed(text),
             None => std::borrow::Cow::Borrowed(text),
         }
     }
@@ -789,12 +811,16 @@ mod tests {
         // Inline code is 77% of the long runs in the corpus, and `#raw` renders text
         // verbatim — so this is the case that matters most.
         //
-        // Five columns: the threshold is relative to how many columns share the width,
-        // and in a two-column table this same run has room to spare and is left alone.
-        let a = alternate(
-            "| a | b | c | d | e |\n|---|---|---|---|---|\n\
-             | `completeSubmissionWithAVeryLongIdentifier` | x | y | z | w |",
-        );
+        // The run must sit in a **narrow** column to need breaking. Each column's
+        // threshold comes from its own share, so the same identifier beside four
+        // one-character columns takes most of the width and is left alone — correctly.
+        // Here a long prose column crowds it into a small share instead.
+        let prose = "a considerably longer sentence that keeps going and going so that \
+                     this column earns the lion's share of the available width";
+        let a = alternate(&format!(
+            "| call | detail |\n|---|---|\n\
+             | `completeSubmissionWithAVeryLongIdentifier` | {prose} |"
+        ));
         assert!(a.contains(ZWSP), "no break offered in the alternate: {a}");
     }
 

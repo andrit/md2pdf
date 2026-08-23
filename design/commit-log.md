@@ -520,3 +520,28 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > Five tests were rewritten rather than renumbered: they pinned the `auto`/`1fr` design. One is now
   > `every_column_is_fractional_so_the_table_cannot_exceed_the_page`, which asserts the invariant
   > instead of the arrangement, and fails if an `auto` column ever creeps back.
+
+- `<pending>` **fix(convert): break limits per column, from the weights that size them** (T29c).
+
+  > **1 of 152 tables now overflows, down from 4 — and from 7 before this line of work started.**
+  > The last is a 2pt overhang in one document, recorded in **F8** rather than chased.
+  >
+  > A single break threshold per table assumed every column had equal room. That stopped being true
+  > the moment T29b made the spec deliberately lopsided: in `(1fr, 1fr, 1fr, 6fr)` a weight-1 column
+  > holds a ninth of the width, while the old threshold — `96 / 4` — gave it room for twenty-four
+  > characters. Measured, that is what was still running off the page.
+  >
+  > Each column's limit now comes from its own share, computed by `column_weights`, which also
+  > produces the column spec. One function feeding both, so the two cannot disagree about how wide a
+  > column is meant to be. **`fr` bounds the table; this bounds the cell.**
+  >
+  > One test changed shape, and the reason is a sign the rule works rather than a patch to keep it
+  > green: its long identifier sat beside four one-character columns, so that column now takes weight
+  > 6 of 10 — a 290pt share — and correctly needs no break at all. Breaking is only exercised when the
+  > run sits in a *narrow* column, so the fixture now has a prose column crowding it. The old test
+  > would have kept passing for the wrong reason.
+  >
+  > Three fixes, three diagnoses, and each one contradicted the previous plan's expectation:
+  > breaks were not enough, `auto` refused to shrink, and a uniform threshold could not survive a
+  > lopsided spec. None of it would have been visible without the overflow oracle (**F1**) — rungs,
+  > census, goldens and valid-PDF counts were unchanged at every step.
