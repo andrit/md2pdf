@@ -589,3 +589,4 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Anticipated as doubt D2 of `plan-t29.md` (*"a break inserted mid-identifier is ugly"*), observed
   > in evidence, then fixed. Both goldens moved and were regenerated deliberately.
+- `<pending>` docs: plan T30 (12pt base); F3 is a missing comemo::evict, not a constraint

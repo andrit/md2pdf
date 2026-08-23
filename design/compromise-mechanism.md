@@ -164,6 +164,17 @@ that the gate fires *where a decision was made* becomes technically true and pra
 
 **Watch:** the flagged percentage. **It should fall as the ladder improves, not rise.**
 
+> **Re-scoped 2026-08-23 by T30.** That instruction is wrong when the baseline is wrong. `base_size_pt`
+> was 10.0 for no recorded reason (**F10**), so *"fits at 10pt"* counted as clean while being a
+> silent concession against the 12pt the template is meant to render at.
+>
+> **[measured]** at a 12pt base, element-level compromise rises 47% → 65% — and every affected
+> element renders **at least as large as it does today**, because a table that fits at 10pt shrinks
+> to at least 10pt. Nothing gets worse; the reporting gets honest.
+>
+> The goal is therefore **distance from optimal**, not the flagged count. The count is a usable proxy
+> only while the baseline is one nobody had to choose.
+
 ### R2 · The order of the rungs · **CLOSED 2026-08-22 by T26b**
 
 > **Rendered and looked at (`design/plan-ladder-order.md`, evidence section).** Deep shrinking beats

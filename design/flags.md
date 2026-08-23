@@ -81,18 +81,40 @@ either, so this instrument and that feature are the same underlying gap.
 **Tracked:** `R4`; feature work lands in 3f. Proposed interim: keep `triage_the_real_corpus` as an
 ignored test taking its directory from an env var.
 
-### F3 · `CONSTRAINT` — a long-lived `Typesetter` OOMs after a few hundred renders
+### F3 · `DEFECT` — nothing evicts the `comemo` cache · **four sightings, mechanism found**
 
-Rendering ~200 elements through one `Typesetter` gets the process **SIGKILLed** on this 4 GB machine.
-Hit twice on 2026-08-22; fixed in the throwaway by constructing a fresh `Typesetter` per element.
+| When | What was running |
+|---|---|
+| 2026-08-22 | T26b exposure — ~200 renders through one `Typesetter` |
+| 2026-08-22 | same, after switching to one instance per element — still killed |
+| 2026-08-23 | T30 base-size comparison — two *probes* per document, 146 documents |
+| **2026-08-23** | **the same, with a fresh `Typesetter` per probe — killed anyway** |
 
-**This bears directly on phase 3f.** The recompile loop's whole design rests on a long-lived `World`
-so `comemo` can memoise across compilations. That is the right design for speed and it has an
-unmeasured ceiling — memoisation grows and nothing evicts it. A session that recompiles a large
-document repeatedly is the same shape as the loop that died here.
+**The fourth sighting found the mechanism, and retired the workaround.** Constructing a fresh
+`Typesetter` per probe did not help, because **`comemo`'s cache is process-global**, keyed by
+memoised call rather than held by the `World`. Dropping a `Typesetter` frees nothing. Both earlier
+"fixes" were placebo — they changed how the work was scoped, not what was retained, and the runs that
+survived did so because they did less work, not because they released anything.
 
-**Tracked:** unscheduled. **3f must measure this**, alongside the incremental-recompile timing it
-already owes.
+**[measured]** `comemo` 0.5.1 is in the dependency graph via typst, and **nothing in this project
+ever calls `comemo::evict`**. Typst's own CLI calls it between compilations; md2pdf does not.
+
+That reclassifies this from `CONSTRAINT` to `DEFECT`: it is not an environmental limit we work
+around, it is a missing call in our own code.
+
+**It is information about the product.** Phase 3f's recompile loop is designed around a long-lived
+`World` precisely so `comemo` can memoise across compilations. That is the right design for speed and
+it is the same shape as the loop that has now died four times. A user adjusting an override on a
+large document, recompiling repeatedly, is not obviously different from what was running here.
+
+**Scheduled: T31.** The likely fix is a `comemo::evict` at the right point in `Typesetter`, which
+makes it a product change rather than test scaffolding. Open questions for the inspection: where the
+call belongs (per compilation? per Job? per batch?), what eviction age preserves the memoisation the
+long-lived `World` exists for, and whether the batch path is already accumulating silently — **[measured]**
+146 documents complete in release without dying, which may mean the bound is simply higher there
+rather than absent.
+
+Before 3f, whose recompile loop is the same shape as the loop that has now died four times.
 
 ### F4 · `DEBT` — `Floors::table_pt` is now inert for any table with an alternate
 
