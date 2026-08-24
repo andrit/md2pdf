@@ -637,7 +637,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > pixels rather than by a test. Recorded as `plan-base-size.md` D5, with the operator's scoping
   > decision — a 12-column table is not a case worth engineering for in a markdown converter.
 
-- `<pending>` docs: the cost rule; plan the typeset move (T31a) — break-anywhere measures 0 overflows
+- `9b7fa27` docs: the cost rule, the typeset-move options, and two blind instruments
 
   > Three things, one theme: a decision that was mine to make was not.
   >
@@ -682,7 +682,9 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > defers to layout and the ladder picks rungs from that number. Disqualifying for a body, possibly
   > fine for the alternate, which is never measured. Recorded in the spike and left unchased.
 
-- `<pending>` docs: spike Option 4 — it works, and the page says the defect is elsewhere (F11)
+  > ---
+  >
+  > **The Option 4 spike, same commit.**
 
   > **Asked to see whether the fourth option changes anything. It does, and not the way I expected.**
   >
@@ -713,3 +715,28 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > the same minimum share as a text column needing far more, and six buckets cannot tell them apart.
   > **The lever is the weighting policy, not the width source** — which is what Options 2, 3 and 4 all
   > replace. Recommendation revised in the plan accordingly.
+
+- `<pending>` docs: rewrite T31a — let Typst break the lines, stop starving the columns
+
+  > **The option numbering is gone, and that is the point of the rewrite.** Four numbered options
+  > invited *"so it's 1 and 4?"* when the answer is one task. Options 2 and 3 were measured out;
+  > Option 1 was contradicted by the operator's direction — `Execution` already counts as over-long
+  > in a narrow column, so break-anywhere would shred ordinary words at *every character*, the
+  > opposite of what was asked. Option 4's mechanism survives with a different allocation rule. The
+  > comparison is kept at the foot of the plan because it was acted on.
+  >
+  > **[measured] 45% of every break we insert lands inside a normal English word** — 579 ordinary
+  > words against 712 identifiers, paths and hashes: `Executio|n`, `Conformi|st`, `Analytic|s`. Not
+  > Typst's doing. Typst wraps at spaces, which is why body prose is never shredded; we break these
+  > words before Typst ever sees them, because `offer_breaks` shreds anything longer than a
+  > per-column character limit and a narrow column's limit is 5–9.
+  >
+  > **The two symptoms are one defect.** A column narrower than its longest word must either break
+  > the word or overflow. We chose to break, and then blamed the breaking. The change is min-content
+  > columns — no column narrower than its widest unbreakable token, remainder shared by demand —
+  > computed in-document with `#context`, so Typst breaks the lines and no width is estimated.
+  >
+  > **The lesson.** All four options replaced the width *source*; the rendered page said the defect
+  > was the allocation *policy*, a floor that cannot tell `79` from `Microservices`. Four options,
+  > none addressing it, because all four were designed from the estimate's history rather than from
+  > the output. The picture cost an hour and moved the plan further than three spikes did.
