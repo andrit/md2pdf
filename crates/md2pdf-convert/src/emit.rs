@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::slice::Iter;
 
-use md2pdf_domain::{Compromise, CompromiseKind, Element, ElementClass, Markup, Template};
+use md2pdf_domain::{Compromise, CompromiseKind, Element, ElementClass, Markup};
 use pulldown_cmark::{BlockQuoteKind, CodeBlockKind, Event, HeadingLevel, Tag, TagEnd};
 
 use crate::escape::{escape, escape_string};
@@ -58,7 +58,7 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         let mut em = Emitter {
             ctx,
             table: None,
-            cell_widths: Vec::new(),
+            cell_min: Vec::new(),
             cell_index: 0,
             footnotes: &footnotes,
             pending: Vec::new(),
@@ -100,18 +100,37 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
         // ceiling recorded in `classify.rs`.
         let element = match em.table.take() {
             Some((columns, _)) if block.class == ElementClass::Table => {
-                let spec = column_spec(columns, &em.cell_widths);
                 // The alternate's cells are emitted a *second* time, with breaking on.
                 // Re-running the same code path rather than rewriting the first pass's
                 // markup: both forms then cannot drift, and nothing has to parse Typst
                 // to find where a break may safely go.
-                let cells = breakable_cells(block, ctx, &footnotes, columns, &em.cell_widths)
-                    .unwrap_or_default();
+                // Two passes, and the second almost never runs. The first offers breaks
+                // only to tokens that fit nowhere at all, which is what keeps ordinary
+                // words whole. It then asks whether the minimums it discovered can
+                // actually coexist: if the columns' longest tokens cannot all fit side
+                // by side, no allocation can satisfy them and *something* has to break,
+                // so the table is emitted again with each column held to its share.
+                //
+                // **[measured]** `below-comfort-reflows.md` is the shape that needs it —
+                // six columns of a 22-character run, wanting 798pt of a 423pt table.
+                let usable = ctx.template.available_pt() - columns as f64 * 2.0 * TABLE_INSET_PT;
+                let across = ctx.template.chars_in(usable);
+                let generous = vec![across.max(4); columns];
+                let (cells, mins) =
+                    breakable_cells(block, ctx, &footnotes, generous).unwrap_or_default();
+
+                let demand: usize = mins.iter().map(|m| m.chars().count()).sum();
+                let (cells, mins) = if demand > across {
+                    breakable_cells(block, ctx, &footnotes, crowded_limits(&mins, across))
+                        .unwrap_or_default()
+                } else {
+                    (cells, mins)
+                };
                 Element::with_reflow(
                     order,
                     block.class,
                     Markup::raw(body),
-                    Markup::raw(format!("#table(columns: ({spec}), {cells})")),
+                    Markup::raw(self_sizing_table(columns, &cells, &mins)),
                 )
             }
             _ => Element::new(order, block.class, Markup::raw(body)),
@@ -141,22 +160,22 @@ fn breakable_cells(
     block: &Block<'_>,
     ctx: &SourceContext,
     footnotes: &HashMap<String, String>,
-    columns: usize,
-    widths: &[usize],
-) -> Option<String> {
+    limits: Vec<usize>,
+) -> Option<(String, Vec<String>)> {
     let mut em = Emitter {
         ctx,
         table: None,
-        cell_widths: Vec::new(),
+        cell_min: Vec::new(),
         cell_index: 0,
         footnotes,
         pending: Vec::new(),
         images: ImageManifest::new(),
         in_header: false,
-        breakable: Some(break_limits(widths, columns, &ctx.template)),
+        breakable: Some(limits),
     };
     em.sequence(&mut block.events.iter().peekable(), None);
-    em.table.take().map(|(_, cells)| cells)
+    let mins = em.cell_min.clone();
+    em.table.take().map(|(_, cells)| (cells, mins))
 }
 
 fn is_footnote_definition(block: &Block<'_>) -> bool {
@@ -182,7 +201,7 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
         let mut em = Emitter {
             ctx,
             table: None,
-            cell_widths: Vec::new(),
+            cell_min: Vec::new(),
             cell_index: 0,
             footnotes: &HashMap::new(),
             pending: Vec::new(),
@@ -196,42 +215,110 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
     map
 }
 
-/// The longest run left alone **in each column**, from the same weights that size them.
+/// Share the table between columns that cannot all have what they want.
 ///
-/// A single threshold per table was the previous rule, and it was wrong for the same
-/// reason equal `1fr` columns were: it assumes every column has the same room. Once the
-/// spec is deliberately lopsided — `(1fr, 1fr, 1fr, 6fr)` — a weight-1 column holds a
-/// ninth of the width, and a threshold computed as a quarter of the line lets a
-/// 20-character run sit in a column with space for eleven. Measured: that is what still
-/// ran off the page after T29b (**F8**).
+/// Only reached when a table is **unfittable as written**: its columns' longest
+/// unbreakable tokens will not go side by side however the width is divided, so a token
+/// must break or the table runs off the page. `below-comfort-reflows.md` is the shape —
+/// six columns each holding a 22-character run, asking 798pt of a 423pt table.
 ///
-/// So each column gets the threshold its own share implies. `fr` bounds the *table*;
-/// this is what bounds the *cell*.
+/// **Cap the greedy, leave the rest alone.** The share is *not* proportional: dividing
+/// the width in proportion to demand punishes every column for one column's hash, and
+/// **[measured]** that alone still broke 103 ordinary words across the corpus. Instead
+/// each column is capped at the largest ceiling under which the table fits, so a column
+/// whose longest token is already below that ceiling is never touched at all. A table of
+/// four eight-character words beside one sixty-character hash caps at 38 — the hash
+/// breaks, the words do not; proportional sharing would have given the words six.
 ///
-/// ## Two corrections from T30
+/// This is the one place a width is still inferred from a character count, and it is
+/// deliberately the *last*: erring here changes a table that was going to be crowded
+/// either way, where erring in the common path shredded `Executio|n`.
+fn crowded_limits(mins: &[String], across: usize) -> Vec<usize> {
+    let mut lens: Vec<usize> = mins.iter().map(|m| m.chars().count()).collect();
+    lens.sort_unstable();
+
+    // Water-filling: walk the columns from narrowest to widest, letting each take what
+    // it asks for while the rest could still be served an equal share of the remainder.
+    // The first column that cannot is where the ceiling falls.
+    let mut remaining = across;
+    let mut cap = lens.last().copied().unwrap_or(across);
+    for (i, len) in lens.iter().enumerate() {
+        let left = lens.len() - i;
+        if *len * left <= remaining {
+            remaining -= *len;
+        } else {
+            cap = remaining / left;
+            break;
+        }
+    }
+    // Never below the floor `break_word` counts to.
+    vec![cap.max(4); mins.len()]
+}
+
+/// The reflow alternate: a table that measures its own contents and sizes its own
+/// columns, at layout time, inside the document.
 ///
-/// The line width comes from the **Template** rather than a constant. It was 96 — A4 at
-/// a 10pt base — so every limit was 20% too generous the moment the base moved to 12pt.
+/// `convert` cannot know how wide text will be — it has no fonts and no layout engine —
+/// and four consecutive defects (T29, T29b, T29c, T30) came from it estimating anyway.
+/// Typst knows exactly. So each side does what it can: **`convert` supplies the words,
+/// Typst supplies the widths.**
 ///
-/// And each column pays [`TABLE_INSET_PT`] out of **its own share**, not out of the
-/// table's width before it is shared. Deducting the inset first spreads it in proportion
-/// to weight, which under-charges exactly the narrow columns where overflow bites: for
-/// `(1fr, 6fr)` the pooled form leaves the narrow column 66pt when it really has 59pt —
-/// one character too many, which is the F8 shape all over again.
-fn break_limits(widths: &[usize], columns: usize, template: &Template) -> Vec<usize> {
-    let weights = column_weights(widths, columns);
-    let total = weights.iter().sum::<usize>().max(1) as f64;
-    weights
-        .iter()
-        .map(|w| {
-            let share_pt = template.available_pt() * *w as f64 / total;
-            let text_pt = share_pt - 2.0 * TABLE_INSET_PT;
-            // Four is the floor `break_word` counts to anyway; below it a limit shreds
-            // every word instead of the over-long ones. Forty-eight keeps the estimate
-            // from licensing an enormous run in a very wide column.
-            template.chars_in(text_pt).clamp(4, 48)
+/// ## The allocation
+///
+/// Min-content first, which is the standard table algorithm and what browsers do:
+///
+/// 1. every column takes at least `mins[i]` — its longest unbreakable run, measured;
+/// 2. what is left over is shared in proportion to how much *more* each column wants.
+///
+/// A column is therefore never narrower than a word it must display, so Typst is never
+/// forced to break one. That is the whole defect, stated as an invariant.
+///
+/// ## Why `fr` rather than the computed points
+///
+/// The widths are converted back into fractions. Fractional columns **divide** the space
+/// available, so the total cannot exceed the page whatever the arithmetic does — the
+/// guarantee `Reflow` depends on to sit one rung before `Clip` (T26a2). The points only
+/// set the *proportions*; Typst still enforces the total.
+///
+/// ## The fallback
+///
+/// When the minimums alone exceed the usable width the table genuinely cannot be laid
+/// out without breaking something, and the shares go back to being proportional to
+/// demand. Tokens keep the break opportunities [`break_limits`] gave them.
+fn self_sizing_table(columns: usize, cells: &str, mins: &[String]) -> String {
+    let min_cells: String = (0..columns)
+        .map(|i| {
+            let text = mins.get(i).map(String::as_str).unwrap_or("");
+            format!("[{}], ", escape(text))
         })
-        .collect()
+        .collect();
+    let inset = 2.0 * TABLE_INSET_PT;
+    format!(
+        "#layout(size => {{\n\
+         let cs = ({cells})\n\
+         let mn = ({min_cells})\n\
+         let n = {columns}\n\
+         let usable = size.width - {inset}pt * n\n\
+         let mins = mn.map(t => measure(t).width)\n\
+         let dem = range(n).map(i => range(cs.len())\n\
+           .filter(k => calc.rem(k, n) == i)\n\
+           .map(k => measure(cs.at(k)).width)\n\
+           .fold(0pt, (a, b) => calc.max(a, b)))\n\
+         let mtot = mins.fold(0pt, (a, b) => a + b)\n\
+         let dtot = dem.fold(0pt, (a, b) => a + b)\n\
+         let w = if mtot >= usable or dtot == 0pt {{\n\
+           if dtot == 0pt {{ range(n).map(_ => usable / n) }}\n\
+           else {{ dem.map(d => usable * (d / dtot)) }}\n\
+         }} else {{\n\
+           let extra = range(n).map(i => calc.max(dem.at(i) - mins.at(i), 0pt))\n\
+           let etot = extra.fold(0pt, (a, b) => a + b)\n\
+           let spare = usable - mtot\n\
+           if etot == 0pt {{ mins.map(m => m + spare / n) }}\n\
+           else {{ range(n).map(i => mins.at(i) + spare * (extra.at(i) / etot)) }}\n\
+         }}\n\
+         table(columns: w.map(x => ((x + {inset}pt) / 1pt) * 1fr), ..cs)\n\
+         }})"
+    )
 }
 
 /// What a table cell loses to padding, on each side.
@@ -246,15 +333,6 @@ fn break_limits(widths: &[usize], columns: usize, template: &Template) -> Vec<us
 /// whole width held text is a quarter too generous. That is what pushed
 /// `reflow-hostile.md` 4pt off the page at a 12pt base while passing at 10pt.
 const TABLE_INSET_PT: f64 = 5.0;
-
-/// The weight each column carries, shared by the column spec and the break limits so the
-/// two cannot disagree about how wide a column is meant to be.
-fn column_weights(widths: &[usize], columns: usize) -> Vec<usize> {
-    let widest = widths.iter().copied().max().unwrap_or(0).max(1);
-    (0..columns)
-        .map(|i| (widths.get(i).copied().unwrap_or(0) * WIDEST_WEIGHT / widest).max(1))
-        .collect()
-}
 
 /// Zero-width space — invisible, and a place Typst may wrap.
 const BREAK: char = '\u{200b}';
@@ -323,54 +401,18 @@ fn break_word(word: &str, limit: usize, out: &mut String) {
     }
 }
 
-/// A column shares the leftover width when it is at least this fraction as wide as the
-/// widest column in the same table. Relative rather than absolute, because the corpus
-/// offers no natural cut: per-column max cell length runs p10 = 8, p50 = 29, p90 = 84
-/// characters across 1215 columns, a smooth spread. See `design/plan-reflow-columns.md`.
-/// The weight given to the widest column. Narrow ones get a proportional share of this,
-/// never less than 1.
-///
-/// Small on purpose: the spec is meant to be readable in a diff and in the census, and
-/// finer gradations than sixths make no visible difference at A4.
-const WIDEST_WEIGHT: usize = 6;
-
-/// Build the reflow alternate's column spec: **weighted fractional columns**, in
-/// proportion to how much text each column holds.
-///
-/// Two failed designs preceded this, and both failures are the reason for the shape:
-///
-/// 1. **Equal `1fr` everywhere** gave a column holding "P1" the same width as one
-///    holding a paragraph. Measured against real tables, deep shrinking read better than
-///    that — which is what stalled the whole reordering question (T26a2).
-/// 2. **`auto` for narrow columns, `1fr` for wide ones** fixed the proportions and broke
-///    the fitting guarantee: `auto` in Typst means *size to content and do not shrink*,
-///    so several near-threshold columns sum past the page and the single `1fr` is left
-///    with negative space. Four real tables ran off the page that way (F8).
-///
-/// Fractional columns **divide** the width available, so the total can never exceed it —
-/// that is the guarantee `Reflow` needs to sit where it does, one rung before `Clip`.
-/// Weighting them keeps the proportionality that `auto` was there to provide.
-fn column_spec(columns: usize, widths: &[usize]) -> String {
-    column_weights(widths, columns)
-        .iter()
-        .map(|w| format!("{w}fr"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 struct Emitter<'m> {
     ctx: &'m SourceContext<'m>,
     /// Columns and cells of the table in this block, if it is one — so the block can
     /// also be expressed in its always-fitting form.
     table: Option<(usize, String)>,
-    /// Longest cell in each column of that table, which decides who absorbs the slack.
+    /// The longest **unbreakable** run in each column: the widest thing Typst will not
+    /// be able to wrap, and therefore the narrowest that column may ever be.
     ///
-    /// ponytail: measures the emitted markup, not the rendered text. A header's
-    /// `#strong[..]` wrapper is constant per column and cancels out; a cell holding a
-    /// link carries its URL and reads wider than it draws. ceiling: a narrow column that
-    /// contains a long link is granted `1fr`, which costs it nothing. upgrade: count
-    /// `Event::Text` while inside the cell.
-    cell_widths: Vec<usize>,
+    /// Recorded as text rather than a count, because a count is a width estimate and
+    /// four defects came from those. `convert` knows the words; `typeset` knows how wide
+    /// they are — so this is emitted for Typst to measure. See `plan-typeset-move.md`.
+    cell_min: Vec<String>,
     cell_index: usize,
     footnotes: &'m HashMap<String, String>,
     /// Compromises for the block being emitted; the Element id is attached once the
@@ -390,15 +432,33 @@ struct Emitter<'m> {
 
 impl Emitter<'_> {
     /// Break long runs, but only when emitting the alternate.
-    fn maybe_break<'t>(&self, text: &'t str) -> std::borrow::Cow<'t, str> {
+    fn maybe_break<'t>(&mut self, text: &'t str) -> std::borrow::Cow<'t, str> {
         match &self.breakable {
             Some(limits) if !limits.is_empty() => {
-                // Which column this cell sits in decides how hard to break.
                 let limit = limits[self.cell_index % limits.len()];
-                std::borrow::Cow::Owned(offer_breaks(text, limit))
+                let broken = offer_breaks(text, limit);
+                self.note_unbreakable(&broken);
+                std::borrow::Cow::Owned(broken)
             }
             Some(_) => std::borrow::Cow::Borrowed(text),
             None => std::borrow::Cow::Borrowed(text),
+        }
+    }
+
+    /// Remember this column's longest run with nowhere to wrap.
+    ///
+    /// Measured **after** breaking, so a token that has been given opportunities counts
+    /// as its longest *segment* rather than its whole length — otherwise a hash would
+    /// demand a column as wide as itself when it is perfectly happy to wrap.
+    fn note_unbreakable(&mut self, broken: &str) {
+        if self.cell_min.is_empty() {
+            return;
+        }
+        let col = self.cell_index % self.cell_min.len();
+        for run in broken.split([BREAK, ' ', '\t', '\n']) {
+            if run.chars().count() > self.cell_min[col].chars().count() {
+                self.cell_min[col] = run.to_string();
+            }
         }
     }
 
@@ -504,7 +564,7 @@ impl Emitter<'_> {
                 let columns = alignments.len().max(1);
                 // Reset before the cells arrive: one table's widths must not leak into
                 // the next, and a document may hold many.
-                self.cell_widths = vec![0; columns];
+                self.cell_min = vec![String::new(); columns];
                 self.cell_index = 0;
                 let cells = self.sequence(events, Some(end));
                 // Remember the pieces so `emit` can also build the reflow alternate.
@@ -523,9 +583,7 @@ impl Emitter<'_> {
                 let inner = self.sequence(events, Some(end));
                 let inner = inner.trim();
                 // Row-major, so the column is the position within the row.
-                if !self.cell_widths.is_empty() {
-                    let col = self.cell_index % self.cell_widths.len();
-                    self.cell_widths[col] = self.cell_widths[col].max(inner.chars().count());
+                if !self.cell_min.is_empty() {
                     self.cell_index += 1;
                 }
                 if self.in_header {
@@ -751,37 +809,65 @@ mod tests {
     }
 
     #[test]
-    fn a_column_is_charged_its_own_inset_not_a_share_of_the_tables() {
-        // The T30 defect, pinned. Twelve equal columns spend 120 of 483 points on inset
-        // — a quarter of the width — and a limit computed as though the whole width held
-        // text let a 6-character header word sit in a column with room for five. It ran
-        // `reflow-hostile.md` 4pt off the page at a 12pt base, and passed at 10pt only
-        // because the smaller type left slack to absorb the error.
-        let t = Template::default();
-        assert_eq!(break_limits(&[30; 12], 12, &t), vec![5; 12]);
+    fn a_crowded_table_shares_what_it_cannot_all_have() {
+        // The fallback, and the only place a width is still guessed from a count. Six
+        // columns each wanting a 22-character run cannot go side by side in a 423pt
+        // table, so each is held to its share rather than overflowing the page.
+        let mins: Vec<String> = std::iter::repeat_n("x".repeat(22), 6).collect();
+        assert_eq!(
+            crowded_limits(&mins, 70),
+            vec![11; 6],
+            "equal columns share equally"
+        );
 
-        // And the deduction must happen *after* the share, or it is spread in proportion
-        // to weight and under-charges the narrow column — the F8 shape. The narrow
-        // column of a `(1fr, 6fr)` spec really holds 483/7 - 10 = 59pt, which is nine
-        // characters at a 12pt base; pooling the inset first would say ten.
-        assert_eq!(break_limits(&[4, 120], 2, &t)[0], 9);
+        // The point of the cap: one greedy column must not cost the others their words.
+        // Four eight-character words beside a sixty-character hash fit if the hash is
+        // held to 38 — and at 38 the words are untouched, because `offer_breaks` only
+        // acts on a token longer than the limit. Sharing in proportion would give the
+        // word columns six characters and shred every one of them.
+        let mut mixed = vec!["x".repeat(60)];
+        mixed.extend(std::iter::repeat_n("x".repeat(8), 4));
+        let cap = crowded_limits(&mixed, 70)[0];
+        assert_eq!(cap, 38, "the cap should fall on the hash alone");
+        assert!(
+            cap > 8,
+            "an eight-character word would still be broken at {cap}"
+        );
+
+        // Never below the floor `break_word` counts to, however lopsided.
+        assert!(crowded_limits(&["x".to_string(), "x".repeat(500)], 20)[0] >= 4);
     }
 
     #[test]
-    fn break_limits_follow_the_base_size() {
-        // The limits are not a constant. `CHARS_ACROSS = 96` was A4 at a 10pt base, and
-        // survived into a 12pt one where the true figure is 80 — every limit 20% too
-        // generous, silently. A wider column at a smaller base must hold more.
-        let big = Template::default();
-        let small = Template {
-            base_size_pt: 10.0,
-            ..Template::default()
-        };
-        let (a, b) = (
-            break_limits(&[30; 4], 4, &big)[0],
-            break_limits(&[30; 4], 4, &small)[0],
+    fn an_ordinary_word_is_never_broken_however_narrow_its_column() {
+        // The defect this task exists for. 579 of the 1291 tokens broken across the
+        // corpus were ordinary words. A twelve-column table is the most crowded shape
+        // there is, and `Execution` must still come through whole.
+        let head = "| a | b | c | d | e | f | g | h | i | j | k | l |";
+        let rule = "|---|---|---|---|---|---|---|---|---|---|---|---|";
+        let row =
+            "| Execution | Conformist | Analytics | Integration | x | x | x | x | x | x | x | x |";
+        let a = alternate(&format!("{head}\n{rule}\n{row}"));
+        for word in ["Execution", "Conformist", "Analytics", "Integration"] {
+            assert!(a.contains(word), "{word} was broken up: {a}");
+        }
+    }
+
+    #[test]
+    fn a_column_may_not_be_narrower_than_its_longest_word() {
+        // The invariant that makes the above safe: Typst is never *forced* to break a
+        // word, because every column asks for at least its longest unbreakable run.
+        // Emitted for Typst to measure rather than estimated here — that estimate is
+        // what T29/T29b/T29c/T30 each got wrong.
+        let a = alternate("| h | detail |\n|---|---|\n| Internationalisation | x |");
+        assert!(
+            a.contains("let mn = ") && a.contains("Internationalisation"),
+            "no per-column minimum emitted: {a}"
         );
-        assert!(b > a, "smaller type must fit more characters: {b} vs {a}");
+        assert!(
+            a.contains("calc.max(dem.at(i) - mins.at(i)"),
+            "minimums are emitted but not allocated first: {a}"
+        );
     }
 
     #[test]
@@ -802,105 +888,100 @@ mod tests {
     }
 
     #[test]
-    fn column_widths_are_proportional_to_their_content() {
+    fn narrow_columns_do_not_get_a_prose_columns_width() {
         // "P1" must not be given the same width as a paragraph — the defect that made
-        // deep shrinking beat reflow on every real table. See plan-reflow-columns.md.
+        // deep shrinking beat reflow on every real table (plan-reflow-columns.md).
+        //
+        // Asserted through the *mechanism* now rather than a literal spec string. Until
+        // T31a the proportions were computed here, from character counts, and could be
+        // read straight out of `columns: (1fr, 6fr, 1fr)`. They are now computed by
+        // Typst from measured content, so what this can check is that the table asks the
+        // right question: demand per column, and a minimum under each.
         let a = alternate(
             "| id | note | p |\n|---|---|---|\n\
              | E01 | a considerably longer sentence that has to wrap somewhere | P1 |",
         );
         assert!(
-            a.starts_with("#table(columns: (1fr, 6fr, 1fr),"),
-            "wrong column spec: {a}"
-        );
-    }
-
-    #[test]
-    fn two_wide_columns_both_get_the_larger_share() {
-        // The rule is relative, so "widest column only" is not enough: a table with two
-        // prose columns needs both to absorb, or the second sizes to its full content.
-        let a = alternate(
-            "| id | first | second |\n|---|---|---|\n\
-             | E1 | a reasonably long sentence here | another reasonably long one too |",
+            a.contains("let dem = "),
+            "no per-column demand measured: {a}"
         );
         assert!(
-            a.starts_with("#table(columns: (1fr, 6fr, 6fr),"),
-            "wrong column spec: {a}"
+            a.contains("let mins = "),
+            "no per-column minimum measured: {a}"
         );
-    }
-
-    #[test]
-    fn a_uniform_table_gives_every_column_a_share() {
-        // Where every column is the same width the old behaviour is the right one, and
-        // the alternate must still fill the width rather than collapsing to the body.
-        let a = alternate("| aaa | bbb |\n|---|---|\n| ccc | ddd |");
+        // Three columns, three minimums, and the narrow ones are named in it.
+        assert!(a.contains("let n = 3"), "wrong column count: {a}");
         assert!(
-            a.starts_with("#table(columns: (6fr, 6fr),"),
-            "wrong column spec: {a}"
+            a.contains("[P1], "),
+            "the narrow column has no minimum: {a}"
         );
     }
 
     #[test]
-    fn every_column_is_fractional_so_the_table_cannot_exceed_the_page() {
-        // The guarantee `Reflow` rests on, and the one an `auto` column broke: fr
-        // columns divide the width available, so the total can never exceed it. Four
+    fn the_table_cannot_exceed_the_page() {
+        // The guarantee `Reflow` rests on, and the one an `auto` column broke: fractional
+        // columns *divide* the width available, so the total can never exceed it. Four
         // real tables ran off the page when narrow columns were `auto` (F8).
+        //
+        // T31a computes the proportions from measured widths, but deliberately hands
+        // Typst `fr` rather than the points it computed — so an arithmetic mistake in the
+        // allocation can misplace the proportions and still not overflow the page.
         for md in [
             "| a |\n|---|\n| b |",
             "| a | b | c | d |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |",
             "| tiny | enormously long cell content goes here |\n|---|---|\n| x | y |",
         ] {
             let a = alternate(md);
-            let spec = a.split("), ").next().unwrap_or("");
-            assert!(!spec.contains("auto"), "an auto column crept back in: {a}");
-            assert!(spec.contains("fr"), "no fractional column: {a}");
+            assert!(!a.contains("auto"), "an auto column crept back in: {a}");
+            assert!(
+                a.contains("table(columns: w.map(x => ((x + 10pt) / 1pt) * 1fr)"),
+                "the columns are not fractional: {a}"
+            );
         }
     }
 
     #[test]
     fn each_table_is_measured_on_its_own() {
-        // The widths are per-table state; a wide table must not set the scale for the
-        // narrow one that follows it.
+        // Per-table state: a wide table must not set the scale for the narrow one after
+        // it. The minimums are the state now, so that is what must not leak.
         let out = run(
             "| id | note |\n|---|---|\n| E01 | a considerably longer sentence to wrap |\n\n\
              | aa | bb |\n|---|---|\n| cc | dd |",
         );
-        let specs: Vec<String> = out
+        let alts: Vec<String> = out
             .elements
             .iter()
             .filter_map(|e| e.reflow.as_ref())
-            // Just the column spec, not the cells.
-            .map(|m| m.as_str().split("), ").next().unwrap_or("").to_string())
+            .map(|m| m.as_str().to_string())
             .collect();
-        assert_eq!(specs.len(), 2, "expected two tables: {specs:?}");
-        // The first table is lopsided, the second uniform. If widths leaked between
-        // them the second would inherit the first's skew.
+        assert_eq!(alts.len(), 2, "expected two tables");
+        assert!(alts[0].contains("sentence"), "first lost its minimum");
         assert!(
-            specs[0].contains("6fr") && specs[0].contains("1fr"),
-            "first: {specs:?}"
-        );
-        assert!(
-            !specs[1].contains("1fr"),
-            "second table inherited the first's widths: {specs:?}"
+            !alts[1].contains("sentence"),
+            "second table inherited the first's minimums: {}",
+            alts[1]
         );
     }
 
     const ZWSP: char = '\u{200b}';
 
+    /// A token no column could ever hold: longer than the whole table's usable width.
+    ///
+    /// These fixtures were sized against the *old* threshold, which was one column's
+    /// share — a 41-character identifier beside a prose column qualified. Since T31a the
+    /// threshold is the whole table, because Typst breaks at spaces on its own and the
+    /// only token needing help is one that fits nowhere. So the fixtures grew, and their
+    /// intent is unchanged: what genuinely cannot fit must still be given somewhere to
+    /// wrap, or the table runs off the page.
+    const UNFITTABLE: &str =
+        "completeSubmissionWithAVeryLongIdentifierThatKeepsGoingAndGoingWellPastAnyPageWidth";
+
     #[test]
     fn long_runs_get_break_opportunities_in_the_alternate() {
         // Inline code is 77% of the long runs in the corpus, and `#raw` renders text
         // verbatim — so this is the case that matters most.
-        //
-        // The run must sit in a **narrow** column to need breaking. Each column's
-        // threshold comes from its own share, so the same identifier beside four
-        // one-character columns takes most of the width and is left alone — correctly.
-        // Here a long prose column crowds it into a small share instead.
-        let prose = "a considerably longer sentence that keeps going and going so that \
-                     this column earns the lion's share of the available width";
         let a = alternate(&format!(
-            "| call | detail |\n|---|---|\n\
-             | `completeSubmissionWithAVeryLongIdentifier` | {prose} |"
+            "| call | detail |\n|---|---|\n| `{UNFITTABLE}` | notes |"
         ));
         assert!(a.contains(ZWSP), "no break offered in the alternate: {a}");
     }
@@ -910,34 +991,31 @@ mod tests {
         // `user_organiz|ation_roles` was what counting produced (F9). A reader breaks
         // such a name after the underscore, and so should we.
         //
-        // Asserted as a property rather than as one exact run of text. How much *else*
-        // gets broken depends on the column's threshold, which depends on the base size
-        // — at a 10pt base this column held 13 characters and `organization` survived
-        // whole; at 12pt it holds 11 and the fallback splits it. Pinning the whole run
-        // made this test a hostage to `base_size_pt` (T30). What must hold at any base
-        // is the F9 claim itself: **no separator is passed over.**
-        let prose = "a considerably longer sentence that keeps going and going so that \
-                     this column earns the lion's share of the available width";
+        // Asserted as a property rather than an exact run of text: how much *else* gets
+        // broken has now depended on the base size (T30) and on the threshold (T31a), and
+        // pinning the whole run made this a hostage to both. What must hold either way is
+        // the F9 claim itself: **no separator is passed over.**
+        let path = "documents/workbench-docs/deeply/nested/path/to/another/directory/holding/a/file_with_a_long_name.md";
         let a = alternate(&format!(
-            "| table | purpose |\n|---|---|\n| user_organization_roles | {prose} |"
+            "| table | purpose |\n|---|---|\n| {path} | notes |"
         ));
-        // Both underscores, escaped by `escape` on the way out.
-        assert_eq!(a.matches("\\_").count(), 2, "the separators are gone: {a}");
+        // Count the path's own separators, not every `/` in the output — the emitted
+        // `#layout` block contains division operators of its own.
+        let seps = path.matches('/').count();
         assert_eq!(
-            a.matches(&format!("\\_{ZWSP}")).count(),
-            2,
+            a.matches(&format!("/{ZWSP}")).count(),
+            seps,
             "a separator was passed over: {a}"
         );
     }
 
     #[test]
     fn a_word_with_no_separator_still_gets_broken() {
-        // The fallback. A hash or a run-on identifier has nothing to break at, and must
-        // still be given somewhere to wrap or the table runs off the page.
-        let prose = "a considerably longer sentence that keeps going and going so that \
-                     this column earns the lion's share of the available width";
+        // The fallback. A hash has nothing to break at, and must still be given somewhere
+        // to wrap or the table runs off the page.
+        let hash = "deadbeefcafef00dbaadf00ddefaced1deadbeefcafef00dbaadf00ddefaced1cafebabedeadbeefcafef00d";
         let a = alternate(&format!(
-            "| hash | purpose |\n|---|---|\n| deadbeefcafef00dbaadf00ddefaced1 | {prose} |"
+            "| hash | purpose |\n|---|---|\n| {hash} | notes |"
         ));
         assert!(a.contains(ZWSP), "no fallback break offered: {a}");
     }

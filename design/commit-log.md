@@ -716,7 +716,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > **The lever is the weighting policy, not the width source** — which is what Options 2, 3 and 4 all
   > replace. Recommendation revised in the plan accordingly.
 
-- `<pending>` docs: rewrite T31a — let Typst break the lines, stop starving the columns
+- `3ecf400` docs: rewrite T31a — let Typst break the lines, stop starving the columns
 
   > **The option numbering is gone, and that is the point of the rewrite.** Four numbered options
   > invited *"so it's 1 and 4?"* when the answer is one task. Options 2 and 3 were measured out;
@@ -740,3 +740,43 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > was the allocation *policy*, a floor that cannot tell `79` from `Microservices`. Four options,
   > none addressing it, because all four were designed from the estimate's history rather than from
   > the output. The picture cost an hour and moved the plan further than three spikes did.
+
+- `<pending>` **feat(convert): let Typst break the lines; stop starving the columns** (T31a, closes F8).
+
+  > **579 ordinary words broken → 0. Corpus overflow 1 → 0. The estimator is deleted.**
+  >
+  > We were shredding ordinary English words — `Executio|n`, `Conformi|st`, `Analytic|s` — and
+  > **[measured]** 45% of every break we inserted landed inside one. Not Typst's doing: Typst tracks
+  > the line, measures the next word and wraps at the space, which is why body prose was never
+  > shredded. We broke those words *before Typst ever saw them*, because `offer_breaks` split
+  > anything longer than a per-column character limit and a narrow column's limit was five.
+  >
+  > **The two symptoms were one defect.** A column narrower than its longest word must either break
+  > the word or overflow the page. We chose to break, and then blamed the breaking.
+  >
+  > The alternate now sizes itself, in the document, from measured content: min-content first — no
+  > column narrower than its widest unbreakable run — with the remainder shared by how much more each
+  > column wants. `convert` supplies the words, Typst supplies the widths, and the columns stay `fr`
+  > so the total still cannot exceed the page whatever the arithmetic does (T26a2's guarantee).
+  >
+  > **`column_weights`, `column_spec`, `WIDEST_WEIGHT` and `cell_widths` are gone.** The character-
+  > count estimator that T29, T29b, T29c and T30 each patched is deleted rather than corrected.
+  >
+  > **The fallback took two attempts, and the first was measured wrong.** A table whose minimums will
+  > not fit side by side must break something — `below-comfort-reflows.md`, six columns of a
+  > 22-character run wanting 798pt of a 423pt table. Sharing the shortfall in proportion to demand
+  > still broke 103 ordinary words, because one column's hash drags every other column's share down.
+  > Capping instead — the largest ceiling under which the table fits, leaving columns already below
+  > it untouched — takes it to zero.
+  >
+  > **Looked at the page, not just the counts** (F11 says the oracle cannot see a table overprinting
+  > itself). `project-state.md`: every word whole, numeric columns narrowed to what they hold, the
+  > prose column given the slack, 24 pages down to 22.
+  >
+  > One golden moved — the only one that renders an alternate; the other six are byte-identical.
+  > Census unchanged: this changes how the alternate is laid out, not which rung is chosen. Five
+  > tests that pinned the old spec strings were rewritten to assert the invariants instead, and three
+  > break fixtures were re-sized because a 41-character identifier now legitimately fits.
+  >
+  > **Not re-measured:** §6's corpus baseline. The release batch is OOM-killed at ~141 of 146 on this
+  > machine (**F3**) — it killed the unmodified binary too, so it is the box, not this change.

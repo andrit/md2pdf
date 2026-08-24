@@ -189,5 +189,5 @@ fn a_proportional_reflow_is_unchanged() {
         "| id | detail | pri | ok | notes |\n\
          |---|---|---|---|---|\n{row}{row}{row}"
     );
-    assert_eq!(golden_at(&md, Reduction::Reflow), "3dae198a3ce94f95/14925");
+    assert_eq!(golden_at(&md, Reduction::Reflow), "4b9f1819369a2057/14935");
 }

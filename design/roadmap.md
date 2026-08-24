@@ -89,8 +89,8 @@ Detail lives in the phase plans; this is the index.
 | T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ |
 | T30 | **Base size 12pt** — the readable target, not the assumed one *(F10)* | 3d | ✅ staged |
 | T31 | **Inspect `comemo` memory growth** *(F3, three sightings)* — 3f's recompile loop rests on it | 3f | ☐ **before 3f** |
-| T31a | **Let Typst break the lines** — min-content columns, break only unbreakable tokens; planned in `plan-typeset-move.md` *(closes F8)* | 3d | ☐ **next** |
-| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ☐ after T31a — render the pairs at the 12pt base |
+| T31a | **Let Typst break the lines** — min-content columns, break only unbreakable tokens; planned in `plan-typeset-move.md` *(closes F8)* | 3d | ✅ staged |
+| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ☐ **next** — render the pairs at the 12pt base |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a

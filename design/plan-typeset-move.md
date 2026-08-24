@@ -62,8 +62,8 @@ least the width of its widest unbreakable token; whatever remains is distributed
 demand. Then Typst breaks at spaces — which *is* "only break on a full word" — and `Execution` is
 never touched.
 
-Computed in-document with `#context` and `measure()`, so **no width is estimated and none crosses a
-crate boundary**. **[measured]** the mechanism works: it renders, the census is unchanged (the
+Computed in-document with `#layout` and `measure()`, so **no width is estimated and none crosses a
+crate boundary** — `convert` supplies the words, Typst supplies the widths. **[measured]** the mechanism works: it renders, the census is unchanged (the
 alternate is never measured for rung choice), and it costs nothing — `base 6636ms · opt4 6744ms`,
 min-of-5 over a 56-document subset holding 54 reflowed tables.
 
@@ -80,25 +80,48 @@ well. The 712 identifiers and hashes keep their opportunities; the 579 words los
 
 ### 3 · The fallback, stated so it is not discovered later
 
-When the min-contents sum past the page — a genuinely unfittable table — something must give. Fall
-back to today's behaviour **for the offending columns only**: break their tokens. **[assumed]** rare;
-the corpus has no table wider than 7 columns.
+When the min-contents sum past the page — a genuinely unfittable table — something must give. Cap
+every column at the largest ceiling under which the table fits (`crowded_limits`), so a column whose
+longest token already sits below that ceiling is **not touched at all**. Sharing the shortfall in
+proportion to demand was tried first and is wrong: it lets one column's hash cost every other column
+its words. See D1.
 
-## Exit criteria
+## Exit criteria — **all met 2026-08-24**
 
-1. **Ordinary words broken: 579 → 0**, by `how_often_do_we_break_an_ordinary_word`.
-2. Corpus overflow **0** by the oracle — necessary, not sufficient (**F11**).
-3. **`project-state.md` rendered and looked at**, via `look.rs`. F11 means no count settles this.
-4. Census regenerated; any rung movement explained before it is committed.
-5. Goldens regenerated deliberately; `verify.sh` green.
+1. ✅ **Ordinary words broken: 579 → 0**, by `how_often_do_we_break_an_ordinary_word`. The 712
+   identifiers, paths and hashes fell to 105 with them, because most of those fit too once the
+   threshold became the table rather than one column.
+2. ✅ Corpus overflow **1 → 0**, closing **F8** — necessary, not sufficient (**F11**).
+3. ✅ **`project-state.md` rendered and looked at.** Every word whole, the numeric columns narrowed
+   to what they hold, the prose column given the slack, and the document 24 → 22 pages.
+4. ✅ Census **unchanged** — no fixture moved rung, which is right: this changes how the alternate
+   is laid out, not which rung the ladder picks.
+5. ✅ **One golden moved**, `a_proportional_reflow_is_unchanged` — the only one that renders an
+   alternate. The other six are byte-identical, which is the containment this change wanted.
+   `verify.sh` green.
+
+**Not established:** the §6 corpus baseline was not re-measured. The release batch is being
+OOM-killed at ~141 of 146 documents on this machine — **F3**, and it killed the *unmodified* binary
+too, so it is the box rather than this change. §6 stands as last measured under T30; the ladder's
+decisions are unchanged, so its counts should be unaffected, but that is **[assumed]** until a batch
+completes.
 
 ## Doubts — audited
 
-### D1 · Does min-content make tables too wide to fit? — **must be measured**
+### D1 · Does min-content make tables too wide to fit? — **yes, and it needed the fallback**
 
 A column pinned to its longest word cannot shrink, which is exactly how `auto` broke the fitting
-guarantee in T29b. The difference is that min-content is the *longest word*, not the *longest cell* —
-much smaller — but "much smaller" is not "small enough". Exit criterion 2 checks it.
+guarantee in T29b.
+
+> **Answered by building it.** `below-comfort-reflows.md` — six columns each holding a 22-character
+> run — asked 798pt of a 423pt table and spilled on the first run. No allocation can satisfy
+> minimums that do not fit side by side; a token has to break.
+>
+> `crowded_limits` is the answer, and its shape came from a second measurement. Sharing the width in
+> proportion to demand **still broke 103 ordinary words**, because one column's hash dragged every
+> other column's share down with it. Capping instead — the largest ceiling under which the table
+> fits, leaving any column already below it untouched — takes that to **0**. Four eight-character
+> words beside a sixty-character hash cap at 38: the hash breaks, the words do not.
 
 ### D2 · Is `#context` safe here? — **[measured] yes for the alternate, no for a body**
 

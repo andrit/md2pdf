@@ -175,7 +175,7 @@ corpus measurement taken so far. Gitignore, delete, or commit.
 
 **Tracked:** roadmap, *Decisions open for the operator*.
 
-### F8 · `DEFECT` — tables that run off the page · **1 left, from 7**
+### F8 · `DEFECT` — tables that run off the page · **CLOSED 2026-08-24 (T31a) — 0, from 7**
 
 | | count | worst spill |
 |---|---|---|
@@ -184,6 +184,15 @@ corpus measurement taken so far. Gitignore, delete, or commit.
 | T29b · weighted `fr` columns | 4 | 9pt |
 | **T29c · per-column break limits** | **1** | **2pt** |
 | T30 · per-column inset | **1** | **2pt** |
+| **T31a · min-content columns** | **0** | **—** |
+
+> **Closed.** The last overhang went when columns stopped being allowed to be narrower than
+> their own longest word. Every earlier fix moved *where* text was broken; this one removed the
+> reason it had to be. **[measured]** 423 tables can reflow, 152 do, 0 overflow — and separately,
+> the ordinary words we were breaking went 579 → 0.
+>
+> **Read with F11.** Zero overflow is necessary, not sufficient: the oracle cannot see a table
+> overprinting itself. The rendered page was checked by eye as well (`plan-typeset-move.md`).
 
 Each step was diagnosed rather than guessed, and each diagnosis contradicted the previous plan's
 expectation:
