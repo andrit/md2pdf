@@ -793,3 +793,111 @@ fn a_reflowed_table_keeps_all_of_its_content() {
         assert!(text.contains(&format!("CELL{i}")), "CELL{i} was lost");
     }
 }
+
+// ---------------------------------------------------------------------------------
+// T28 — glyph coverage.
+//
+// A character with no glyph renders as **tofu**, an empty box, and nothing in the text
+// layer says so: extracted text carries the character either way. That is why ✅ and ❌
+// sat unnoticed in roughly a fifth of the corpus until a page was looked at during T26b.
+//
+// These live in this file rather than their own because each integration binary
+// statically links ~250 crates of the typst graph, and linking two at once has run the
+// machine out of memory three times. One binary per crate.
+// ---------------------------------------------------------------------------------
+
+/// Characters the corpus actually contains, with why each one matters.
+///
+/// The ones that work are as load-bearing as the ones that do not: box drawing inside
+/// code fences appears in 46 documents, and losing it would be worse than the tofu.
+const CORPUS_CHARACTERS: &[(char, &str)] = &[
+    ('✓', "check mark U+2713"),
+    ('✗', "ballot X U+2717"),
+    ('⚠', "warning sign U+26A0"),
+    ('→', "rightwards arrow U+2192"),
+    ('▸', "small right triangle U+25B8"),
+    (
+        '─',
+        "box drawing horizontal U+2500 — 46 documents, in code fences",
+    ),
+    ('│', "box drawing vertical U+2502"),
+    ('└', "box drawing up-and-right U+2514"),
+    ('☐', "ballot box U+2610 — emitted by convert for task lists"),
+    (
+        '☑',
+        "ballot box checked U+2611 — emitted by convert for task lists",
+    ),
+];
+
+/// The two that have no glyph, and are therefore substituted before they reach here.
+///
+/// Kept as a list rather than deleted: if a future FontBook covers them, this test goes
+/// red and the substitution can be retired rather than lingering as a rewrite nobody
+/// needs any more.
+const SUBSTITUTED_AWAY: &[(char, &str)] = &[
+    ('✅', "white heavy check mark U+2705 — 28 of 146 documents"),
+    ('❌', "cross mark U+274C — 8 of 146 documents"),
+];
+
+#[test]
+fn the_substituted_characters_are_still_the_ones_that_need_it() {
+    let ts = Typesetter::new();
+    let covered: Vec<char> = SUBSTITUTED_AWAY
+        .iter()
+        .map(|(c, _)| *c)
+        .filter(|c| ts.uncovered([*c]).is_empty())
+        .collect();
+    assert!(
+        covered.is_empty(),
+        "the FontBook now covers {covered:?} — the substitution in md2pdf-convert is no \
+         longer needed and should be retired rather than left rewriting the author's text"
+    );
+}
+
+/// The two halves of T28 must not drift apart.
+///
+/// `md2pdf-convert` decides what `✅` *means* when it cannot be drawn; this crate knows
+/// what can be drawn. Neither can check the other at compile time — `convert` has no
+/// fonts by design and must keep none. So the seam is checked here: every replacement
+/// `convert` chose must be a character the shipped FontBook actually covers.
+///
+/// Without this, swapping a font could turn one tofu into a different tofu and every
+/// test would still pass.
+#[test]
+fn every_substitution_target_can_actually_be_drawn() {
+    let ts = Typesetter::new();
+    let targets: Vec<char> = md2pdf_convert::glyphs::SUBSTITUTIONS
+        .iter()
+        .map(|(_, to, _)| *to)
+        .collect();
+    assert!(!targets.is_empty(), "the substitution table is empty");
+    let missing = ts.uncovered(targets);
+    assert!(
+        missing.is_empty(),
+        "convert substitutes in characters this FontBook cannot draw either: {missing:?}"
+    );
+}
+
+#[test]
+fn every_character_the_corpus_uses_has_a_glyph() {
+    let ts = Typesetter::new();
+    let missing = ts.uncovered(CORPUS_CHARACTERS.iter().map(|(c, _)| *c));
+    let described: Vec<String> = missing
+        .iter()
+        .map(|c| {
+            let why = CORPUS_CHARACTERS
+                .iter()
+                .find(|(m, _)| m == c)
+                .map(|(_, d)| *d)
+                .unwrap_or("");
+            format!("  {c}  {why}")
+        })
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "the shipped FontBook has no glyph for:\n{}\n\
+         These render as an empty box where the author put a character. \
+         See `design/plan-glyphs.md`.",
+        described.join("\n")
+    );
+}

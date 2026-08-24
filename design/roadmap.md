@@ -86,7 +86,7 @@ Detail lives in the phase plans; this is the index.
 | T29 | Break long runs in the alternate; **build the overflow oracle** (F1) | 3d | ◐ **staged — partial, 7 → 4** |
 | T29b | Weighted `fr` columns — diagnosed F8 as `auto` refusing to shrink | 3d | ◐ **staged — severity 6× down, count still 4** |
 | T29c | Per-column break limits, from the weights that size them *(F8: 4 → 1)* | 3d | ✅ staged |
-| T28 | **Glyph coverage** — ✅/❌ render as tofu in ~20% of real documents | 3d | ☐ **next** |
+| T28 | **Glyph coverage** — 21 characters have no glyph, not 2; substituted + reported *(font bundling open)* | 3d | ✅ staged |
 | T30 | **Base size 12pt** — the readable target, not the assumed one *(F10)* | 3d | ✅ staged |
 | T31 | **`comemo` eviction** — the cache was never evicted; batch bounded 3.2GB → 690MB *(closes F3)* | 3f | ✅ staged |
 | T31a | **Let Typst break the lines** — min-content columns, break only unbreakable tokens; planned in `plan-typeset-move.md` *(closes F8)* | 3d | ✅ staged |

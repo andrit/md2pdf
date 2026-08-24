@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use md2pdf_convert::{convert, ImageProbe, SourceContext};
-use md2pdf_domain::{BlanketResolution, Diagnostic, Template};
+use md2pdf_domain::{BlanketResolution, Compromise, CompromiseKind, Diagnostic, Element, Template};
 use md2pdf_paths::{output_path, PathBroker, PathError};
 use md2pdf_typeset::Typesetter;
 
@@ -191,6 +191,54 @@ fn convert_batch(
     });
 }
 
+/// Report characters that will render as an empty box.
+///
+/// **The engine asks, because only the engine can.** `convert` chose the text and has no
+/// fonts by design; `typeset` has the FontBook and never sees a Diagnostic being built.
+/// This is the composition layer, so the question is asked here.
+///
+/// `convert` already substitutes the two characters with a sensible plain equivalent
+/// (`glyphs::SUBSTITUTIONS`). This covers everything else — **[measured]** an exhaustive
+/// scan of the corpus found **21** characters with no glyph, not the 2 that were noticed
+/// by eye: emoji faces, coloured circles, a clipboard. There is no editorial substitute
+/// for 😊, so the honest thing is to say so rather than draw a box and call the document
+/// clean. See `design/plan-glyphs.md`.
+///
+/// One Compromise per character per document, not per occurrence — the Diagnostic is
+/// read by a person deciding where to look.
+fn tofu(elements: &[Element], deps: &Deps) -> Vec<Compromise> {
+    let mut seen: Vec<char> = Vec::new();
+    for el in elements {
+        for c in el.body.as_str().chars() {
+            // ASCII is covered by construction, and asking about every one of it would
+            // dominate the cost of a check that runs on every document.
+            if (c as u32) > 0x7F && !seen.contains(&c) {
+                seen.push(c);
+            }
+        }
+    }
+    if seen.is_empty() {
+        return Vec::new();
+    }
+
+    let missing = deps.typesetter.uncovered(seen);
+    elements
+        .first()
+        .map(|first| {
+            missing
+                .into_iter()
+                .map(|c| Compromise {
+                    id: first.id,
+                    kind: CompromiseKind::UnsupportedConstruct {
+                        construct: format!("no glyph for U+{:04X} {c}", c as u32),
+                    },
+                    page: None,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Existence, answered by the one crate allowed to ask.
 ///
 /// The adapter lives here rather than in `md2pdf-paths` because `ImageProbe` is
@@ -253,7 +301,9 @@ fn convert_one(
     // Both halves of the pipeline concede, and only a sealed Diagnostic carries both
     // (`INV-4`). Flagged is not failed: the document converted, and something in it
     // needed a judgment call.
-    let diagnostic = Diagnostic::seal(conversion.compromises.clone(), &decisions);
+    let mut convert_compromises = conversion.compromises.clone();
+    convert_compromises.extend(tofu(&conversion.elements, deps));
+    let diagnostic = Diagnostic::seal(convert_compromises, &decisions);
 
     // Emit the whole thing, not just whether it is empty. Sealing it and reporting only
     // `is_flagged()` is how a run can say "70 need your attention" and explain two.

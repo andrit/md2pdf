@@ -861,3 +861,36 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > measured; it is not measurable from inside a concurrent test binary. So `eviction_still_evicts`
   > checks the ~100x recompile difference a cleared cache produces — robust to any machine noise, and
   > it would have caught both placebo fixes and any future version skew. Proved to fire.
+
+- `<pending>` **feat: say what we cannot draw, and draw what we can** (T28).
+
+  > **The task was scoped from what someone saw; measuring found ten times as much.** T28 was
+  > *"✅/❌ render as tofu"*. Asking the FontBook about every non-ASCII character in the corpus:
+  > **81 distinct, 21 with no glyph** — ❓ ❗ 📋 🔄 🔍 🔴 🔵 🔶 🚪 🤔 and eight faces, besides the two.
+  >
+  > **That kills substitution as the whole answer**, which is what the plan would have been. `✅ → ✓`
+  > is an honest trade; there is no plain-text equivalent of 😊, and inventing one would be worse
+  > than admitting we cannot draw it.
+  >
+  > So two things, and the second is the one that generalises. `convert` substitutes the two
+  > commonest — 36 of 146 documents — and **records it**, because colour is lost and rewriting an
+  > author's characters silently is not a thing a converter should do. The **engine** then asks the
+  > Typesetter which characters have no glyph and reports each one. That needs no table and no font,
+  > and it covers a character nobody has seen yet.
+  >
+  > **It was an `INV-4` breach.** An empty Diagnostic is supposed to mean the document converted
+  > cleanly; 19 characters were rendering as empty boxes while it stayed empty.
+  >
+  > The seam is tested from both sides. `convert` holds the editorial question (*what does ✅ mean?*)
+  > and keeps no fonts; `typeset` holds the typographic one (*can anything draw it?*). Its contract
+  > tests assert that every substitution target is covered **and** that the substituted originals
+  > still need substituting — so a FontBook that gains emoji turns a test red and the rewrite is
+  > retired rather than left rewriting text nobody needs rewritten.
+  >
+  > Rendered and looked at: `✓` and `✗` draw, 🤔 and 🔴 still box **and now say so**.
+  >
+  > **A bundled fallback font is the real fix and is not in this commit.** There is no emoji font on
+  > the machine and `INV-1` forbids fetching one at build time — the FontBook is vendored so builds
+  > are offline and reproducible. Blocked, not declined: `design/plan-glyphs.md` costs Noto Emoji
+  > (monochrome, OFL, subsettable to a few KB) against Noto Color Emoji and Twemoji, and recommends
+  > the first. Adding the file retires the substitution and the test that says so is already written.

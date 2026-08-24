@@ -149,6 +149,14 @@ impl Typesetter {
         self.world.clear_files();
     }
 
+    /// Which of these characters the shipped FontBook cannot draw.
+    ///
+    /// Exposed so the engine can *report* a missing glyph rather than emit a silent box.
+    /// See `design/plan-glyphs.md`.
+    pub fn uncovered(&self, chars: impl IntoIterator<Item = char>) -> Vec<char> {
+        fonts::FontLibrary::shipped().uncovered(chars)
+    }
+
     /// Families available to Templates. Typst ships no sans-serif; ours are added.
     pub fn font_families(&self) -> Vec<String> {
         fonts::FontLibrary::shipped().families()

@@ -60,6 +60,25 @@ impl FontLibrary {
         Self { book, fonts }
     }
 
+    /// Which of these characters no shipped face can draw.
+    ///
+    /// A character with no glyph renders as **tofu** — an empty box — and nothing in the
+    /// text layer says so: extracted text carries the character either way, which is why
+    /// ✅ and ❌ sat unnoticed in a fifth of the corpus until a page was looked at (T28).
+    ///
+    /// Asks every face rather than only the body family, because Typst falls back across
+    /// the whole book: a character counts as covered if *anything* can draw it.
+    pub fn uncovered(&self, chars: impl IntoIterator<Item = char>) -> Vec<char> {
+        chars
+            .into_iter()
+            .filter(|c| {
+                !(0..self.fonts.len())
+                    .filter_map(|i| self.book.info(i))
+                    .any(|info| info.coverage.contains(*c as u32))
+            })
+            .collect()
+    }
+
     pub fn families(&self) -> Vec<String> {
         let mut v: Vec<String> = self.book.families().map(|(n, _)| n.to_string()).collect();
         v.sort_unstable();

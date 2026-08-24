@@ -262,4 +262,54 @@ mod tests {
         println!("kinds: {kinds:?}");
         println!("shrink targets: {sizes:?}");
     }
+
+    /// Every distinct character in the corpus that no shipped face can draw.
+    ///
+    /// The T28 list (✅, ❌) came from noticing boxes on a rendered page. This asks the
+    /// question exhaustively instead, so the fix is scoped by the corpus rather than by
+    /// what someone happened to see.
+    #[test]
+    #[ignore = "needs documents/; scopes T28"]
+    fn what_else_has_no_glyph() {
+        use std::collections::BTreeSet;
+        let broker = md2pdf_paths::PathBroker::new();
+        let mut seen: BTreeSet<char> = BTreeSet::new();
+        let mut counts: BTreeMap<char, usize> = BTreeMap::new();
+
+        for source in broker
+            .walk(&std::path::PathBuf::from("/workspace/documents"))
+            .expect("corpus")
+            .sources
+        {
+            let Ok(markdown) = broker.read_to_string(&source) else {
+                continue;
+            };
+            let mut here: BTreeSet<char> = BTreeSet::new();
+            for c in markdown.chars() {
+                // ASCII is covered by construction; asking about it drowns the answer.
+                if (c as u32) > 0x7F {
+                    seen.insert(c);
+                    here.insert(c);
+                }
+            }
+            for c in here {
+                *counts.entry(c).or_default() += 1;
+            }
+        }
+
+        let ts = Typesetter::new();
+        let missing = ts.uncovered(seen.iter().copied());
+        println!(
+            "\n{} distinct non-ASCII characters in the corpus",
+            seen.len()
+        );
+        println!("{} of them have no glyph:", missing.len());
+        for c in &missing {
+            println!(
+                "  {c}  U+{:04X}  in {} of 146 documents",
+                *c as u32,
+                counts.get(c).copied().unwrap_or(0)
+            );
+        }
+    }
 }

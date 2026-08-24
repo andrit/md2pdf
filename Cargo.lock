@@ -1212,6 +1212,7 @@ name = "md2pdf-typeset"
 version = "0.1.0"
 dependencies = [
  "comemo",
+ "md2pdf-convert",
  "md2pdf-domain",
  "serde_json",
  "thiserror",
