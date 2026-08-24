@@ -18,6 +18,7 @@ mod census;
 mod estimate;
 mod floors;
 mod look;
+mod memory;
 mod overflow;
 
 use std::path::Path;

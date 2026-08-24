@@ -110,7 +110,27 @@ either, so this instrument and that feature are the same underlying gap.
 **Tracked:** `R4`; feature work lands in 3f. Proposed interim: keep `triage_the_real_corpus` as an
 ignored test taking its directory from an env var.
 
-### F3 · `DEFECT` — nothing evicts the `comemo` cache · **four sightings, mechanism found**
+### F3 · `DEFECT` — nothing evicts the `comemo` cache · **CLOSED 2026-08-24 (T31)**
+
+> **Closed.** `md2pdf_typeset::evict` exists and `job.rs` calls it between documents at age 5.
+>
+> **[measured]** the curve, finally plotted: ~24 MiB per document, unbounded — 3162 MiB at 131
+> documents and dead by 141. With eviction it plateaus at **690 MiB** and the corpus completes in
+> 29.7s, which is the timing §6 last recorded, so the documented baseline recipe works again.
+>
+> **[measured]** it costs nothing: a document recompiled steadily takes 4ms at age 5 against 5ms
+> with no eviction at all. Only `evict(0)` destroys the memoisation, and completely — 470ms.
+>
+> Gated by `eviction_still_evicts`, which was **proved to fire** rather than assumed to. It asserts
+> that eviction *has an effect* rather than asserting the memory curve: `VmRSS` is process-wide and
+> cargo runs tests concurrently, so two attempts at a memory bound failed while the code was correct
+> (D1 in the plan). Full measurements in `design/plan-comemo.md`.
+>
+> **Five sightings, and four of them produced a workaround instead of a measurement.** Two were
+> placebo — rescoping the `Typesetter` when the cache was never the `Typesetter`'s. The lesson is
+> the one this register exists for: a flag with no instrument attached collects sightings.
+
+### F3 (original) · nothing evicts the `comemo` cache
 
 | When | What was running |
 |---|---|

@@ -21,6 +21,10 @@ typst-layout  = "=0.15.1"
 typst-pdf     = "=0.15.1"
 typst-render  = "=0.15.1"
 typst-kit     = { version = "=0.15.1", features = ["embedded-fonts"] }
+# Pinned exactly, like the typst crates: `comemo`'s cache is process-global and we now
+# call `evict` on it (F3), so a version skew between the crate typst memoises through and
+# the crate we evict through would silently stop evicting anything.
+comemo        = "=0.5.1"
 pulldown-cmark = "0.12"
 serde         = { version = "1", features = ["derive"] }
 serde_json    = "1"

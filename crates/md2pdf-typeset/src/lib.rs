@@ -93,6 +93,26 @@ impl Compilation {
     }
 }
 
+/// Release memoised results older than `max_age` compilations.
+///
+/// **`comemo`'s cache is process-global.** It is keyed by memoised call, not held by the
+/// `World`, so dropping a [`Typesetter`] frees none of it — which is why constructing a
+/// fresh one per document was a placebo, twice (**F3**). Nothing in this project called
+/// this until T31; typst's own CLI calls it between compilations, and we inherited the
+/// cache without inheriting the eviction.
+///
+/// `max_age` counts *compilations, not seconds*: an entry survives if it was used within
+/// the last `max_age` calls to `evict`. So the number is a memory/speed dial, and the
+/// speed it buys is real — 3f's recompile loop exists to be fast because `comemo`
+/// remembers the last compilation of the document being edited.
+///
+/// Exposed here rather than called inside [`Typesetter::render`] because the right
+/// cadence belongs to the caller: a batch wants it between documents, an interactive
+/// loop wants it far less often. See `design/plan-comemo.md`.
+pub fn evict(max_age: usize) {
+    comemo::evict(max_age);
+}
+
 /// The typesetting engine. Holds a long-lived `World` so `comemo` memoisation
 /// survives across compilations — that is what makes an Override cost ~8ms rather
 /// than a cold compile.

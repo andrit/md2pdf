@@ -101,6 +101,13 @@ fn report(source: &Path, outcome: Result<bool, JobError>, emit: Emit) {
     }
 }
 
+/// How many compilations a memoised result survives without being used.
+///
+/// Not seconds — `comemo` ages entries by calls to `evict`, so this is "five documents
+/// ago" in the batch. **[measured]** 2026-08-24: see `design/plan-comemo.md` for the
+/// curve this bounds and the trade it does not cost.
+const EVICT_AGE: usize = 5;
+
 /// Convert every Source under a root, mirroring the tree.
 ///
 /// Collisions are resolved **before any conversion begins** — see `output::plan`. One
@@ -160,6 +167,20 @@ fn convert_batch(
                 report(&write.source, Err(e), emit);
             }
         }
+        // **Between documents, not within one.** `comemo`'s cache is process-global and
+        // nothing evicted it until T31: the batch grew ~24 MiB per document, unbounded,
+        // and was killed by the OOM killer at ~141 of the 146-document corpus. With this
+        // call it plateaus around 690 MiB and the corpus completes.
+        //
+        // Age 5, **[measured]**: recompiling a document steadily costs 4ms at age 5
+        // against 5ms with no eviction at all, so the memoisation the long-lived World
+        // exists for is fully preserved. Only `evict(0)` destroys it — 470ms, a hundred
+        // times slower. The number is a memory/speed dial and this end of it is free.
+        //
+        // Here rather than inside `Typesetter::render` because the right cadence belongs
+        // to the caller: a batch wants it per document, 3f's recompile loop will want it
+        // far less often. See `design/plan-comemo.md`.
+        md2pdf_typeset::evict(EVICT_AGE);
     }
 
     emit(Event::BatchCompleted {

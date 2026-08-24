@@ -781,7 +781,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > **Not re-measured:** §6's corpus baseline. The release batch is OOM-killed at ~141 of 146 on this
   > machine (**F3**) — it killed the unmodified binary too, so it is the box, not this change.
 
-- `<pending>` **feat: the comfort floor is 10pt, chosen by eye; the dead floors are resolved** (T26c, closes F4).
+- `103671f` **feat: the comfort floor is 10pt, chosen by eye; the dead floors are resolved** (T26c, closes F4).
 
   > **Five pairs of real corpus tables rendered both ways and looked at.** The turnover is between
   > 9.0 and 10.0: at 8.0 and 9.0 a wrapped table at full size beats a shrunk one; at 10.0 the shrink
@@ -822,3 +822,42 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > §6 re-measured with `recount_the_baseline` rather than the batch, which is OOM-killed at ~141 of
   > 146 on this machine (**F3**, and it kills an unmodified binary too).
+
+- `<pending>` **feat(typeset): evict the `comemo` cache; the batch was never bounded** (T31, closes F3).
+
+  > **Five sightings, and this is the first time anyone plotted the curve.** One long-lived
+  > `Typesetter`, the corpus a document at a time, RSS from the kernel:
+  >
+  > ```
+  >              no eviction     evict(5)
+  >   1 doc         111 MiB       111 MiB
+  >  41 docs       1629 MiB       563 MiB
+  > 131 docs       3162 MiB       634 MiB
+  > 146 docs        killed        690 MiB
+  > ```
+  >
+  > **~24 MiB per document, unbounded — and never the `Typesetter`'s to free.** `comemo`'s cache is
+  > process-global, keyed by memoised call rather than held by the `World`, so both earlier "fixes"
+  > (a fresh `Typesetter` per element, then per probe) were placebo: they changed how the work was
+  > scoped, not what was retained. Nothing in this project had ever called `comemo::evict`; typst's
+  > own CLI does, and we inherited the cache without inheriting the eviction.
+  >
+  > **The batch that has been dying now completes: 146 documents, exit 0, 29.7s** — which is also the
+  > timing §6 last recorded, so the documented baseline recipe works again.
+  >
+  > **It costs nothing.** A document recompiled steadily takes **4ms at age 5 against 5ms with no
+  > eviction at all**, so the memoisation the long-lived `World` exists for is fully preserved. Only
+  > `evict(0)` destroys it, and completely — 470ms, a hundred times slower. The dial has a wide flat
+  > region and 5 sits in the middle of it. The call lives in `job.rs` rather than inside `render`
+  > because the cadence is the caller's: a batch wants it per document, 3f's recompile loop will not.
+  >
+  > **`comemo` is pinned `=0.5.1`**, exactly as the typst crates are. A skew between the crate typst
+  > memoises through and the crate we evict through would silently evict nothing.
+  >
+  > **The gate asserts eviction *works*, not that memory is bounded, and two failed attempts are why.**
+  > `VmRSS` is process-wide and cargo runs a binary's tests concurrently: an absolute 60 MiB bound
+  > read 81 MiB of other tests' allocations, and a paired evicting-vs-not comparison collapsed to
+  > 82-vs-92 because the first half left the allocator warm for the second. The curve is real and
+  > measured; it is not measurable from inside a concurrent test binary. So `eviction_still_evicts`
+  > checks the ~100x recompile difference a cleared cache produces — robust to any machine noise, and
+  > it would have caught both placebo fixes and any future version skew. Proved to fire.
