@@ -363,7 +363,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
 - `bc1aee7` docs: render the T26b comparison sheets; withdraw the reordering recommendation
 - `b59efac` docs: record class C — when the rendered page overrules the plan
 
-- `<pending>` **feat(convert): a reflow alternate worth choosing** (T26a2).
+- `15d0a43` **feat(convert): a reflow alternate worth choosing** (T26a2).
 
   > The alternate emitted `columns: (1fr, ...)` — equal shares — so a column holding "P1" was given
   > the same width as a column holding a paragraph. That is why the T26b comparison sheets found deep
@@ -404,7 +404,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > the ceiling. A link's URL inflates its column, which at worst grants a narrow column `1fr`.
 - `b87e587` docs: re-vet the ladder order against measured overflow exposure (T26b)
 
-- `<pending>` **feat(typeset): reflow before shrinking small, and before rotating** (T26b).
+- `f4388ee` **feat(typeset): reflow before shrinking small, and before rotating** (T26b).
 
   > Closes **R2**. A table that would shrink below the comfort floor now wraps at full size instead,
   > and wraps rather than taking a landscape page of its own (option O2a). One new `Floors` field, one
@@ -441,7 +441,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `Reflowed` reads the same whether the table wrapped beautifully or ran off the page.
 - `7ea6bd1` docs: add the flags register; plan T29 against measured token locations
 
-- `<pending>` **feat(convert): break long runs in the reflow alternate; build the overflow oracle** (T29).
+- `3612437` **feat(convert): break long runs in the reflow alternate; build the overflow oracle** (T29).
 
   > **Partial. 7 elements would have overflowed; 4 still do.** Committed as a real improvement and an
   > unfinished one rather than reported as success — the residual is flag **F8**, scheduled as T29b.
@@ -484,7 +484,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > Also flagged: **F7** `DEBT`, zero-width spaces reach the PDF text layer, so a path copied out of a
   > reflowed table pastes with invisible characters in it.
 
-- `<pending>` **fix(convert): weighted fractional columns in the reflow alternate** (T29b).
+- `e949671` **fix(convert): weighted fractional columns in the reflow alternate** (T29b).
 
   > **Diagnosed before fixing**, and the diagnosis was the work. All four tables still running off
   > the page shared one shape: several `auto` columns and a single `1fr`. **`auto` in Typst means
@@ -521,7 +521,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `every_column_is_fractional_so_the_table_cannot_exceed_the_page`, which asserts the invariant
   > instead of the arrangement, and fails if an `auto` column ever creeps back.
 
-- `<pending>` **fix(convert): break limits per column, from the weights that size them** (T29c).
+- `6844894` **fix(convert): break limits per column, from the weights that size them** (T29c).
 
   > **1 of 152 tables now overflows, down from 4 — and from 7 before this line of work started.**
   > The last is a 2pt overhang in one document, recorded in **F8** rather than chased.
@@ -546,7 +546,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > lopsided spec. None of it would have been visible without the overflow oracle (**F1**) — rungs,
   > census, goldens and valid-PDF counts were unchanged at every step.
 
-- `<pending>` **feat: guard the engine against learning what a window is** (T24, G2).
+- `3578b8d` **feat: guard the engine against learning what a window is** (T24, G2).
 
   > `INV-8` — the whole out-of-process-adapter design rests on the engine never depending on a UI
   > toolkit, and until now that was protected by nothing but the absence of a UI. The moment phase 4
@@ -571,7 +571,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > adapter exists, versus cleaning up whatever leaked against a working UI nobody wants to break.
 - `5c5088d` docs: plan the floors (T26c) — four of five have no observable effect
 
-- `<pending>` **fix(convert): break long runs at separators, not by counting** (F9).
+- `f5ef1fc` **fix(convert): break long runs at separators, not by counting** (F9).
 
   > `user_organiz | ation_roles` and `submissions. | content_flag | s` — visible in the T26c pairs,
   > and the main reason the reflowed rendering lost the comparison on sight rather than on substance.
@@ -589,9 +589,9 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Anticipated as doubt D2 of `plan-t29.md` (*"a break inserted mid-identifier is ugly"*), observed
   > in evidence, then fixed. Both goldens moved and were regenerated deliberately.
-- `<pending>` docs: plan T30 (12pt base); F3 is a missing comemo::evict, not a constraint
+- `3506772` docs: plan T30 (12pt base); F3 is a missing comemo::evict, not a constraint
 
-- `<pending>` **feat: the base size is 12pt, and break limits come from the template** (T30, closes F10).
+- `78915ee` **feat: the base size is 12pt, and break limits come from the template** (T30, closes F10).
 
   > **`base_size_pt: 10.0` was never chosen** — no doc comment, nothing in the repository recording a
   > reason, carried forward from the font spike's *"10pt body"* specimen. The template is called
@@ -636,3 +636,80 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > arithmetic that `typeset` could measure exactly, each one found by rendering a page and counting
   > pixels rather than by a test. Recorded as `plan-base-size.md` D5, with the operator's scoping
   > decision — a 12-column table is not a case worth engineering for in a markdown converter.
+
+- `<pending>` docs: the cost rule; plan the typeset move (T31a) — break-anywhere measures 0 overflows
+
+  > Three things, one theme: a decision that was mine to make was not.
+  >
+  > **`design/invariants.md` gains "Cost is not a reason to decline an option"** — the operator's
+  > rule, after `plan-base-size.md` declined *move break insertion into typeset* in four words
+  > ("most correct, largest change") and T29, T29b, T29c and T30 then each fixed the defect it would
+  > have closed once. Options get a real description and a score against the goal; cost is the
+  > operator's to weigh, correctness is mine to argue.
+  >
+  > **`plan-typeset-move.md`** is the first plan written to it — three options, described in full and
+  > scored, with the recommendation stated as a disagreement with the request rather than hidden as a
+  > silent substitution.
+  >
+  > **[measured] a 5-minute spike moved corpus overflow 1 → 0**: offer a break after every character
+  > of an already-over-long token instead of counting to an estimated limit. F8's residual 2pt
+  > overhang, which four tasks could not close, closes — because the spike stops predicting where the
+  > line ends and lets Typst choose. `U+200B` is an opportunity, not a break, so extra ones inside a
+  > token that fits change nothing; the affected token set does not grow, only the granularity within
+  > it; and it applies to the reflow alternate alone. Reverted, not shipped — it is Option 1, and the
+  > choice is the operator's.
+  >
+  > **`scripts/commit-log.sh` was blind to every code entry.** Its regex required the line to end
+  > after the bold subject, but code entries carry a task suffix — `**feat: …** (T29c).` — so eight
+  > committed entries sat `<pending>` while it reported "hashes are current". Second time it has been
+  > blind to a whole form, so it is now a `verify.sh` step: safe, because it reports only entries
+  > whose commit already exists.
+  >
+  > **`design/evidence/` is now gitignored** (operator's call): the rasters are proof for questions
+  > already answered in prose, and the ladder generates them faster than anything else in the repo.
+  >
+  > **Then the operator asked to move past assumption on Option 2, and both its numbers were wrong.**
+  > `estimate.rs` measures them. Cost: 1636ms to measure every cell of all 375 reflow-capable tables
+  > in release — **+5.5% on the 29.7s batch, an upper bound**, against the "noticeable slowdown" I
+  > had warned of. Benefit: the estimated column share sits **3.6 points** from the measured one at
+  > the median, 9.1 at p90, 31.4 at worst, with 7% of columns off by more than a tenth of the
+  > table's width. So Option 2 is cheaper than I priced it *and* buys less than "correct sizing"
+  > implies — usually-right to right, not broken to working. Both corrections came from measuring,
+  > and both were mine to have measured before writing the option.
+  >
+  > A fourth possibility surfaced while measuring: Typst can size its own columns via `#context` and
+  > `measure()`. It renders — and the probe then reports natural width `0.0`, because `#context`
+  > defers to layout and the ladder picks rungs from that number. Disqualifying for a body, possibly
+  > fine for the alternate, which is never measured. Recorded in the spike and left unchased.
+
+- `<pending>` docs: spike Option 4 — it works, and the page says the defect is elsewhere (F11)
+
+  > **Asked to see whether the fourth option changes anything. It does, and not the way I expected.**
+  >
+  > **The mechanism is sound.** A `#context` alternate that measures its own cells and sets its own
+  > column widths: census unchanged (so the alternate really is never measured for rung choice, the
+  > open question), corpus overflow 1 → 0, and **free** — min-of-5 on a 56-document subset with 54
+  > reflowed tables, `base 6636ms · opt4 6744ms`, inside the noise.
+  >
+  > **Then I rendered the page and it was unreadable.** `measure()` returns a cell's *unbroken*
+  > natural width, so a prose cell measures as one long line and raw proportionality gave it ~95% of
+  > the table; three numeric columns collapsed and **overprinted each other**.
+  >
+  > **The oracle called that page clean** — overprinting inside a table puts no ink past the margin.
+  > Raised as **F11**, and it demotes every "corpus overflow is 0" in `plan-typeset-move.md`,
+  > Option 1's included, from proof to necessary-but-not-sufficient. `look.rs` is the answer for now:
+  > raster a page to a hand-rolled PNG so a human can look. `check-boundaries.sh` caught it using
+  > `std::fs` on the first try, which is INV-9 doing its job on a throwaway.
+  >
+  > **With the existing policy applied to measured widths, the output is identical to today's.**
+  > `WIDEST_WEIGHT` quantises weights into six buckets, so a column must be off by ~17 points before
+  > the spec moves; the measured error is 3.6 at the median. Corpus-wide the spec would change for
+  > **148 of 375 tables (39%)** — not a no-op — but on the table holding the corpus's worst error
+  > (31.4 points) it changed nothing visible.
+  >
+  > **And the page named the real defect, which no option in the plan addresses.** Column 1 breaks
+  > mid-word — `Micros/ervices`, `Capabi/lity`, `Regist/ry` — while three columns holding `79`, `145`
+  > and `14` sit at the same width. That is `column_weights`' `.max(1)` floor: a numeric column gets
+  > the same minimum share as a text column needing far more, and six buckets cannot tell them apart.
+  > **The lever is the weighting policy, not the width source** — which is what Options 2, 3 and 4 all
+  > replace. Recommendation revised in the plan accordingly.

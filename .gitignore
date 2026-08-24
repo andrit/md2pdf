@@ -11,3 +11,16 @@ spikes/**/target
 spikes/**/*.pdf
 spikes/**/*.png
 spikes/**/decisions.json
+
+# Evidence rasters. The ladder is tuned by rendering a page and looking at it, so this
+# tree accumulates PNGs faster than anything else in the repo — 27 of them from T26a2,
+# T26b and T26c alone. They are *proof for a question already answered*: the finding
+# they support is written up in design/, and the answer is what future readers need.
+#
+# So they are deliberately untracked (operator's call, 2026-08-23). Design docs cite
+# them by path; a citation is a record of what was looked at, not a promise that the
+# file is still in the tree. Regenerate by re-running the task's comparison.
+design/evidence/
+
+# Workbench session transcripts — tooling output, not project history.
+.workbench/transcripts/

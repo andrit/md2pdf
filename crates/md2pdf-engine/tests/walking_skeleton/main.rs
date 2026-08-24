@@ -15,6 +15,8 @@
 //! See `docs/development.md`.
 
 mod census;
+mod estimate;
+mod look;
 mod overflow;
 
 use std::path::Path;

@@ -141,6 +141,35 @@ self-selected, and self-selection is the failure. So the audit is now two passes
 of its own claims: rotation "for no gain" was false for 10 tables, and O1 turned out to delete a rung
 rather than reorder one.
 
+## Cost is not a reason to decline an option
+
+**Added 2026-08-23 by the operator**, after T30 closed the fourth defect of one shape: *"do not
+decline a plan based solely on cost. Surface plans that appear to be costly and lay them out with
+alternatives, with a detailed description of each and a comparison lined against the actual goal. I
+can catch poorly visioned plans and help decide if the cost is worth it."*
+
+**What went wrong.** `plan-base-size.md` §"The change" listed three options for `CHARS_ACROSS` and
+declined the third — *move break insertion into `md2pdf-typeset`* — with the single note *"most
+correct, largest change"*. That is a cost, written by me, decided by me, in one line. T29, T29b, T29c
+and T30 then each fixed the same defect: `convert` estimating a width that `typeset` could measure.
+Four tasks bought what the declined option would have closed once.
+
+**The rule.** An option may be *recommended against*, never *silently priced out*. Where a plan
+weighs options:
+
+1. **Every option gets a real description** — what it changes, what it makes impossible, what it
+   costs. A one-line dismissal is not a description, and "largest change" is not an argument.
+2. **Each is scored against the actual goal**, not against effort. The goal here was never "derive a
+   constant"; it was *break limits that cannot be wrong*. Option 3 met that goal and option 2 only
+   narrowed the gap — which the option table did not say.
+3. **A recurring defect re-opens the comparison.** The second time one shape of bug is fixed, the
+   option that would have prevented it is re-costed in the open, not left as settled.
+4. **The operator decides.** Cost is real and may well win; it is simply not mine to weigh alone.
+   Recommend, show the working, and put the choice where it belongs.
+
+**The distinction that matters:** declining on *cost* is the operator's call. Declining on
+*correctness* — this option does not achieve the goal — stays mine, and gets its reason in the text.
+
 **What this deliberately does not do:** class C is the reason to build things. Measuring earlier does
 not suppress discovery — it moves the *knowable* half before the code, leaving the genuinely
 unknowable half where it belongs. If a plan stops changing entirely, that is a warning sign, not

@@ -22,6 +22,27 @@ is a deeper analysis of one mechanism, and it stays there. This is everything el
 
 ## Open
 
+### F11 · `INSTRUMENT` — the oracle cannot see a table overprinting itself
+
+**[measured] 2026-08-23**, while spiking Option 4 of `plan-typeset-move.md`. A column spec that
+starves narrow columns makes their contents print *on top of each other* — `Phase 3C`, `79`, `145`
+and `14` in one illegible stack — while the table's outer edge stays inside the margin.
+
+`overflow()` looks for ink to the right of the text area. There is none. **It reported the page
+clean.**
+
+This is R3's "silent degradation" with a second face: not only does a recorded `Reflowed` look
+handled, the instrument built to check it agrees. Every "corpus overflow is 0" claim in
+`plan-typeset-move.md` therefore proves *necessary, not sufficient* — including Option 1's.
+
+**What would close it:** a check for ink overlapping a cell boundary, or more cheaply, comparing a
+cell's measured natural width against the width its column was actually given. The second is nearly
+free once anything measures cells — which is what Options 2/3/4 do.
+
+**Until then:** `look.rs` renders a page to PNG so a human can check. Numbers do not settle this one.
+
+**Tracked:** `plan-typeset-move.md`, Option 4 section. Interacts with **R3**.
+
 ### F10 · `DEFECT` — the base size was never chosen · **CLOSED 2026-08-23 (T30)**
 
 > **Closed.** The base is 12pt, with the reason in the type. `CHARS_ACROSS` is gone — break limits

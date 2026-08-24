@@ -7,6 +7,11 @@ rc=0
 step() { echo; echo "=== $1 ==="; shift; "$@" || { echo "^^ FAILED"; rc=1; }; }
 
 step "boundaries"  ./scripts/check-boundaries.sh
+# Safe to gate on: it reports only entries whose commit already exists, so the one you
+# are about to make is still legitimately `<pending>`. Nothing ran it until 2026-08-23,
+# which is how eight entries drifted after being committed — the exact drift it was
+# written to catch.
+step "commit-log"  ./scripts/commit-log.sh
 step "fmt"         cargo fmt --all -- --check
 step "clippy"      cargo clippy --workspace --all-targets -- -D warnings
 

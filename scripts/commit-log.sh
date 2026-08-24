@@ -22,6 +22,31 @@ import sys
 fix = sys.argv[1] == "--fix"
 path = "design/commit-log.md"
 
+
+def parse(line):
+    """The two entry forms. Returns (subject, rest) or None."""
+    m = re.match(r"^- `<pending>` \*\*(?P<bold>.+?)\*\*(?P<rest>.*)$", line)
+    if m:
+        return m.group("bold"), m.group("rest")
+    m = re.match(r"^- `<pending>` (?P<plain>[^*].*?)(?P<rest>\.?)$", line)
+    if m:
+        return m.group("plain"), m.group("rest")
+    return None
+
+
+# Self-check, because this script's whole failure mode is going *quietly* blind to one
+# form and reporting success — it has now done so twice, once per revision, and a silent
+# pass looks exactly like a clean tree. Cheap, and it runs inside verify.sh.
+for probe, want in [
+    ("- `<pending>` **feat(convert): a thing** (T29c).", "feat(convert): a thing"),
+    ("- `<pending>` docs: a thing without bold", "docs: a thing without bold"),
+    ("- `<pending>` docs: a thing with a stop.", "docs: a thing with a stop"),
+]:
+    got = parse(probe)
+    if not got or got[0] != want:
+        print(f"commit-log: the matcher is blind to a form it must see:\n  {probe}\n  got {got}")
+        sys.exit(1)
+
 log = subprocess.run(
     ["git", "log", "--format=%h\t%s"], capture_output=True, text=True
 ).stdout.splitlines()
@@ -34,13 +59,13 @@ for line in lines:
     # Bold is optional: code commits carry a **bold subject** and a body, docs commits
     # are listed by subject alone. The first version of this matched only the bold
     # form and so was blind to every docs entry — which is most of them.
-    m = re.match(r"^- `<pending>` (?:\*\*(?P<bold>.+?)\*\*|(?P<plain>[^*].*?))(?P<rest>\.?)$", line)
-    if not m:
+    #
+    parsed = parse(line)
+    if not parsed:
         out.append(line)
         continue
-    bold = m.group("bold")
-    subject = bold or m.group("plain")
-    rest = m.group("rest") or ""
+    subject, rest = parsed
+    bold = line.startswith("- `<pending>` **")
 
     # The bold text is the commit subject minus its task suffix, so match the whole
     # thing. Matching the task tag alone is ambiguous — "(T27)" named both the commit
