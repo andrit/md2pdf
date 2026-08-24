@@ -84,20 +84,53 @@ otherwise re-measure in landscape:                          (images only, in pra
 | T14 | `Clip` made reachable | it was unreachable code — elements too wide for landscape overflowed silently |
 | T26a | `Reflow` added before `Clip` | 25 elements across 9 real documents were losing columns, and every one was a table |
 
-## 6 · Baseline — 146 real documents, 2026-08-23
+## 6 · Baseline — 146 real documents, 2026-08-24
 
-Release build, `documents/`, `Template::default()` (**12pt base**, 9/7/7pt floors, 9pt table
-comfort floor, 0.25 image scale). Re-measured after T30, as §9 requires.
+`documents/`, `Template::default()` (12pt base, 7pt table floor, **10pt table comfort floor**,
+0.25 image scale). Re-measured after T26c, as §9 requires.
 
 ```
-146 converted, 146 valid PDFs, 29.7s
- 93 flagged (64%)          (was 70, 48%)
+146 documents, 9616 elements
+ 93 flagged (63%)          (unchanged — the same documents, on different rungs)
 
- 152  reflowed             (unchanged)
- 122  shrunk to floor      (was 46)
+ 198  reflowed             (was 152)
+  76  shrunk to floor      (was 122)
    0  rotated
    2  unsupported construct
    0  clipped
+```
+
+**Every table that would land below 10pt now wraps instead.** The 46 elements at 9.0 and 9.5pt moved
+to reflow when T26c raised the comfort floor, chosen by eye against rendered pairs. The flagged count
+did not move, because those documents were already flagged for the same elements — what changed is
+how they are rendered, which is the thing the count cannot see.
+
+**Overflow: 198 tables reflow, 0 overflow.** The rung carrying two thirds of all compromises no
+longer spills, which is what made raising the floor defensible — before T31a, moving 46 more elements
+onto it would have been a gamble.
+
+**Shrink targets** — nothing renders below 10pt any more:
+
+```
+ 10.0pt  20      11.0pt  17
+ 10.5pt  21      11.5pt  18
+```
+
+> **Measured without the batch.** §9's recipe is the release CLI over `documents/`, which is
+> currently OOM-killed at ~141 of 146 on this machine (**F3**) — it kills an unmodified binary too,
+> so it is not a regression. `recount_the_baseline` walks the same corpus a document at a time with
+> a fresh `Typesetter`, counting the same decisions. Timing and valid-PDF counts are therefore not
+> reported here; the rung counts are.
+
+### The previous baseline, 2026-08-23 — after T30, before T26c
+
+```
+146 documents
+ 93 flagged (64%)
+
+ 152  reflowed
+ 122  shrunk to floor       9.0pt 27 · 9.5pt 19 · 10.0pt 20
+   2  unsupported construct 10.5pt 21 · 11.0pt 17 · 11.5pt 18
 ```
 
 **Read the rise as reporting, not regression.** The 76 new shrinks are tables that already rendered

@@ -741,7 +741,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > none addressing it, because all four were designed from the estimate's history rather than from
   > the output. The picture cost an hour and moved the plan further than three spikes did.
 
-- `<pending>` **feat(convert): let Typst break the lines; stop starving the columns** (T31a, closes F8).
+- `8f98450` **feat(convert): let Typst break the lines; stop starving the columns** (T31a, closes F8).
 
   > **579 ordinary words broken → 0. Corpus overflow 1 → 0. The estimator is deleted.**
   >
@@ -780,3 +780,45 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > **Not re-measured:** §6's corpus baseline. The release batch is OOM-killed at ~141 of 146 on this
   > machine (**F3**) — it killed the unmodified binary too, so it is the box, not this change.
+
+- `<pending>` **feat: the comfort floor is 10pt, chosen by eye; the dead floors are resolved** (T26c, closes F4).
+
+  > **Five pairs of real corpus tables rendered both ways and looked at.** The turnover is between
+  > 9.0 and 10.0: at 8.0 and 9.0 a wrapped table at full size beats a shrunk one; at 10.0 the shrink
+  > is clean and keeps one line per row; at 11.0 the reduction is imperceptible and reflow wraps a
+  > one-row table for nothing. So `table_comfort_pt` is **10.0**.
+  >
+  > **It moved because the base moved.** The floor is absolute but comfort is relative: 9.0 was a
+  > tenth off a 10pt base and is a quarter off 12pt. `plan-base-size.md` D2 predicted exactly this
+  > and left it for this task. **[assumed]** 9.5 is defensible on the same evidence — one number,
+  > one step wide, and the pairs are in `plan-floors.md`.
+  >
+  > **[measured]** shrinks 122 → 76, reflows 152 → **198**, flagged unchanged at 93 of 146 — the
+  > same documents, on different rungs, which is exactly what the count cannot see. **0 of the 198
+  > overflow.** Moving 46 more elements onto the reflow rung would have been a gamble before T31a
+  > made that rung safe; D1 checked it with the oracle rather than assuming.
+  >
+  > **The plan's own candidates were stale and the task had to re-derive them.** It proposed pairs at
+  > 8.0/8.5/9.0, chosen when the base was 10pt — all four of those now reflow, so the question had
+  > moved up with the base and two more pairs were rendered above it.
+  >
+  > **F4 closed by resolving all five floors, not one.** `prose_pt` and `code_pt` are **deleted** —
+  > **[measured]** never read, since `for_class` only ever receives `Table` — and deleted now, while
+  > `Floors` is still a Rust type rather than a `template.toml` migration for fields that never did
+  > anything. `table_pt` is kept and re-documented as what it is: a bound on the probe's scan and the
+  > clip marker's size, not a policy. `image_scale` is marked untuned, because no image in the corpus
+  > reaches the ladder and inventing fixtures to tune it would be calling a guess evidence.
+  >
+  > **Looking found a defect in T31a.** The 9.0 reflow put `integration.destination.verified` over
+  > its column border: the min-content token was measured as plain text and drawn in mono, which is
+  > wider. Fixed by carrying the token's *markup* into the measurement. The oracle saw nothing
+  > (**F11**), the census was unchanged, every test was green — second defect in two tasks that only
+  > a rendered page could show.
+  >
+  > `shrink-to-comfort-floor.md` lost two characters per cell to land back on the boundary at 10.0.
+  > It is the only fixture that shrinks, so `the_census_covers_every_compromise_kind` went red when
+  > it reflowed — the census noticing it had lost sight of a rung, which is what it is for. Goldens
+  > unmoved: no golden fixture's table sits in the 9.0–10.0 band.
+  >
+  > §6 re-measured with `recount_the_baseline` rather than the batch, which is OOM-killed at ~141 of
+  > 146 on this machine (**F3**, and it kills an unmodified binary too).

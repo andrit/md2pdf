@@ -4,13 +4,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::element::ElementClass;
 
-/// Per-class minimum font size. Never global — body prose is read linearly and
-/// fatigues; tables are scanned.
+/// How small the ladder may go before it stops.
+///
+/// **Two floors, not five (T26c).** `prose_pt` and `code_pt` were removed rather than
+/// documented: **[measured]** they were never read. `Floors::for_class` was called from
+/// exactly one place — the probe's text-atomic branch — that branch runs only for
+/// `is_atomic` classes, which are `Table | Image`, and `Image` takes the scale branch
+/// instead. So it only ever received `Table`, and the other two arms were unreachable
+/// from the day `Code` became wrappable.
+///
+/// They were removed while `Floors` is still only a Rust type. Once 3e loads it from
+/// `template.toml` the same removal is a migration for fields that never did anything,
+/// and a template author will have spent time tuning them first. See
+/// `design/plan-floors.md` D4.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Floors {
-    pub prose_pt: f64,
+    /// The size at which the ladder gives up shrinking a table.
+    ///
+    /// **Not "how small a table may get" — [`Floors::table_comfort_pt`] decides that**,
+    /// and it sits above this one, so nothing is ever rendered at a size between the two.
+    /// What this still does, and why it stays: it bounds the probe's downward scan, and
+    /// it sets the text size of the *clip marker* drawn when even landscape will not fit
+    /// (`render.rs`). Raising it above the comfort floor would make it observable again.
+    ///
+    /// Recorded as flag **F4**: a number that looks like a policy and is a bound.
     pub table_pt: f64,
-    pub code_pt: f64,
     /// The size below which wrapping reads better than shrinking further.
     ///
     /// A **second** floor on the same class, answering a different question from
@@ -25,40 +43,75 @@ pub struct Floors {
     /// keeping; below it the same table reads better at full size with its cells
     /// wrapping. Applies only to Elements that carry an alternate — a table.
     ///
-    /// 9.0pt is a starting point, chosen to be tuned by eye against real pages (T26c),
-    /// not derived. See `design/plan-ladder-order.md`.
+    /// **10.0pt, chosen by eye against real pages (T26c, 2026-08-24)**, not derived.
+    ///
+    /// Three real corpus tables were rendered both ways at each candidate boundary and
+    /// looked at. The turnover is between 9.0 and 10.0:
+    ///
+    /// | Would shrink to | Which reads better |
+    /// |---|---|
+    /// | 8.0pt | **reflow** — a third off the base is small, and wrapping costs little |
+    /// | 9.0pt | **reflow** — a quarter off is still a visible drop in size |
+    /// | 10.0pt | **shrink** — legible, and it keeps one line per row for scanning |
+    /// | 11.0pt | **shrink** — the reduction is imperceptible; reflow wraps for nothing |
+    ///
+    /// It moved from 9.0 because [`Template::base_size_pt`] moved. The floor is absolute
+    /// but *comfort* is relative: against a 10pt base, 9.0 was a tenth off; against 12pt
+    /// it is a quarter. The number had to follow the base, which is precisely what T30's
+    /// doubt D2 predicted and left for this task to settle.
+    ///
+    /// **[assumed]** 9.5 is defensible on the same evidence — the boundary is one step
+    /// wide and this is a judgement about reading, not a measurement. One number to
+    /// change if you disagree; `design/plan-floors.md` holds the pairs.
     pub table_comfort_pt: f64,
     /// Smallest scale an image may be reduced to before rotating instead (0..1).
     ///
     /// Not a point size — images shrink by scale factor. Without a floor here shrink
     /// would always succeed and rotation would never fire, however unreadable the
     /// result. A quarter size is the starting point; rotation buys roughly 1.5x the
-    /// width, which is the better trade below that. Tunable by eye like the others.
+    /// width, which is the better trade below that.
+    ///
+    /// **Untuned, and deliberately left so (T26c).** **[measured]** no image in the
+    /// corpus reaches the ladder — every compromised element is a table — so there is
+    /// nothing real to judge it against. It could be tuned against invented fixtures,
+    /// but that would be choosing a number against documents nobody has and calling it
+    /// evidence. It waits for a corpus with images in it.
     pub image_scale: f64,
 }
 
 impl Default for Floors {
     fn default() -> Self {
         Self {
-            prose_pt: 9.0,
             table_pt: 7.0,
-            code_pt: 7.0,
-            table_comfort_pt: 9.0,
+            table_comfort_pt: 10.0,
             image_scale: 0.25,
         }
     }
 }
 
 impl Floors {
-    /// The point-size floor for a text-bearing class.
+    /// The point-size floor for a text-bearing atomic class.
+    ///
+    /// **Stops pretending to dispatch (T26c).** It used to `match` four ways, which read
+    /// as "each class has its own floor" — but only `Table` ever arrived, so three arms
+    /// were decoration. It is kept as a named call rather than inlined so the *question*
+    /// stays visible at the call site, and so a future atomic class has an obvious place
+    /// to be added rather than a bare field access to notice and change.
     ///
     /// Meaningless for `Image`, which shrinks by scale — use [`Floors::image_scale`].
     pub fn for_class(&self, class: ElementClass) -> f64 {
         match class {
-            ElementClass::Table => self.table_pt,
-            ElementClass::Code => self.code_pt,
             ElementClass::Image => 0.0,
-            _ => self.prose_pt,
+            // Every other class that reaches here is atomic, and `Table` is the only
+            // atomic text class there is. Debug-asserted rather than silently defaulted.
+            _ => {
+                debug_assert_eq!(
+                    class,
+                    ElementClass::Table,
+                    "a new atomic class reached the floor without one of its own"
+                );
+                self.table_pt
+            }
         }
     }
 }

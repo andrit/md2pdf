@@ -90,7 +90,7 @@ Detail lives in the phase plans; this is the index.
 | T30 | **Base size 12pt** — the readable target, not the assumed one *(F10)* | 3d | ✅ staged |
 | T31 | **Inspect `comemo` memory growth** *(F3, three sightings)* — 3f's recompile loop rests on it | 3f | ☐ **before 3f** |
 | T31a | **Let Typst break the lines** — min-content columns, break only unbreakable tokens; planned in `plan-typeset-move.md` *(closes F8)* | 3d | ✅ staged |
-| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ☐ **next** — render the pairs at the 12pt base |
+| T26c | Floors by eye — planned in `plan-floors.md`; **one live floor, four dead** *(F4)* | 3d | ✅ staged |
 
 **The guards track interleaves rather than follows.** T22 is built *before* T19: determinism already
 holds, so golden-hash tests go green immediately and act as a regression net **during** 3c2 — a

@@ -59,6 +59,7 @@ pub fn emit(blocks: &[Block<'_>], ctx: &SourceContext) -> Emitted {
             ctx,
             table: None,
             cell_min: Vec::new(),
+            longest: Vec::new(),
             cell_index: 0,
             footnotes: &footnotes,
             pending: Vec::new(),
@@ -166,6 +167,7 @@ fn breakable_cells(
         ctx,
         table: None,
         cell_min: Vec::new(),
+        longest: Vec::new(),
         cell_index: 0,
         footnotes,
         pending: Vec::new(),
@@ -202,6 +204,7 @@ fn collect_footnotes(blocks: &[Block<'_>], ctx: &SourceContext) -> HashMap<Strin
             ctx,
             table: None,
             cell_min: Vec::new(),
+            longest: Vec::new(),
             cell_index: 0,
             footnotes: &HashMap::new(),
             pending: Vec::new(),
@@ -288,8 +291,9 @@ fn crowded_limits(mins: &[String], across: usize) -> Vec<usize> {
 fn self_sizing_table(columns: usize, cells: &str, mins: &[String]) -> String {
     let min_cells: String = (0..columns)
         .map(|i| {
-            let text = mins.get(i).map(String::as_str).unwrap_or("");
-            format!("[{}], ", escape(text))
+            // Already markup — `note_unbreakable` escaped it in the face it will be
+            // drawn in, so escaping again here would show the escapes.
+            format!("[{}], ", mins.get(i).map(String::as_str).unwrap_or(""))
         })
         .collect();
     let inset = 2.0 * TABLE_INSET_PT;
@@ -413,6 +417,9 @@ struct Emitter<'m> {
     /// four defects came from those. `convert` knows the words; `typeset` knows how wide
     /// they are — so this is emitted for Typst to measure. See `plan-typeset-move.md`.
     cell_min: Vec<String>,
+    /// Length in characters of each entry in `cell_min` — kept beside it because that
+    /// field holds markup, whose length is not the length of the text it draws.
+    longest: Vec<usize>,
     cell_index: usize,
     footnotes: &'m HashMap<String, String>,
     /// Compromises for the block being emitted; the Element id is attached once the
@@ -432,12 +439,12 @@ struct Emitter<'m> {
 
 impl Emitter<'_> {
     /// Break long runs, but only when emitting the alternate.
-    fn maybe_break<'t>(&mut self, text: &'t str) -> std::borrow::Cow<'t, str> {
+    fn maybe_break<'t>(&mut self, text: &'t str, code: bool) -> std::borrow::Cow<'t, str> {
         match &self.breakable {
             Some(limits) if !limits.is_empty() => {
                 let limit = limits[self.cell_index % limits.len()];
                 let broken = offer_breaks(text, limit);
-                self.note_unbreakable(&broken);
+                self.note_unbreakable(&broken, code);
                 std::borrow::Cow::Owned(broken)
             }
             Some(_) => std::borrow::Cow::Borrowed(text),
@@ -450,14 +457,25 @@ impl Emitter<'_> {
     /// Measured **after** breaking, so a token that has been given opportunities counts
     /// as its longest *segment* rather than its whole length — otherwise a hash would
     /// demand a column as wide as itself when it is perfectly happy to wrap.
-    fn note_unbreakable(&mut self, broken: &str) {
+    ///
+    /// Stored as **markup, not text**, so Typst measures it in the face it will actually
+    /// be drawn in. Inline code renders in the mono family, which is wider than the body
+    /// at the same size: measuring `integration.destination.verified` as plain text made
+    /// its column a little too narrow and the token overlapped the cell border — visible
+    /// in the T26c 9.0pt pair, and invisible to every count.
+    fn note_unbreakable(&mut self, broken: &str, code: bool) {
         if self.cell_min.is_empty() {
             return;
         }
         let col = self.cell_index % self.cell_min.len();
         for run in broken.split([BREAK, ' ', '\t', '\n']) {
-            if run.chars().count() > self.cell_min[col].chars().count() {
-                self.cell_min[col] = run.to_string();
+            if run.chars().count() > self.longest[col] {
+                self.longest[col] = run.chars().count();
+                self.cell_min[col] = if code {
+                    format!("#raw(\"{}\")", escape_string(run))
+                } else {
+                    escape(run)
+                };
             }
         }
     }
@@ -478,11 +496,11 @@ impl Emitter<'_> {
                     // An End we did not open: the caller's frame will handle it.
                 }
                 Event::Start(tag) => out.push_str(&self.element(tag, events)),
-                Event::Text(t) => out.push_str(&escape(&self.maybe_break(t))),
+                Event::Text(t) => out.push_str(&escape(&self.maybe_break(t, false))),
                 Event::Code(t) => {
                     out.push_str(&format!(
                         "#raw(\"{}\")",
-                        escape_string(&self.maybe_break(t))
+                        escape_string(&self.maybe_break(t, true))
                     ));
                 }
                 Event::SoftBreak => out.push(' '),
@@ -565,6 +583,7 @@ impl Emitter<'_> {
                 // Reset before the cells arrive: one table's widths must not leak into
                 // the next, and a document may hold many.
                 self.cell_min = vec![String::new(); columns];
+                self.longest = vec![0; columns];
                 self.cell_index = 0;
                 let cells = self.sequence(events, Some(end));
                 // Remember the pieces so `emit` can also build the reflow alternate.

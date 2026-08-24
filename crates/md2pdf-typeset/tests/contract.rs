@@ -32,9 +32,11 @@ fn template() -> Template {
         margin_pt: 12.0,
         base_size_pt: 10.0,
         floors: Floors {
-            prose_pt: 9.0,
             table_pt: 7.0,
-            code_pt: 7.0,
+            // Kept at 9.0 rather than following the default to 10.0: these tests pin the
+            // *mechanism* against a small synthetic page, and several choose their sizes
+            // to sit either side of this boundary. T26c moved the shipped default by eye
+            // against real pages, which is a different question from this one.
             table_comfort_pt: 9.0,
             image_scale: 0.25,
         },

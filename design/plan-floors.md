@@ -83,20 +83,59 @@ measurements.
   honest way to choose it here. It could be judged against synthetic fixtures, but that would be
   tuning a number against invented documents and calling it evidence.
 
+## What was chosen — 2026-08-24
+
+**`table_comfort_pt`: 9.0 → 10.0.**
+
+Five pairs rendered from real corpus tables, each shown shrunk and reflowed:
+
+| Would shrink to | Shrunk | Reflowed at full size | Reads better |
+|---|---|---|---|
+| 8.0pt | legible but a third off the base | wraps to two lines per row | **reflow** |
+| 9.0pt | compact, one line per row | full size, two rows wrap | **reflow** |
+| 10.0pt | clean, one line per row | half the rows wrap | **shrink** |
+| 11.0pt | indistinguishable from body | wraps a one-row table for nothing | **shrink** |
+
+The turnover sits between 9.0 and 10.0, so the floor is 10.0.
+
+**It moved because the base moved.** T30 raised `base_size_pt` to 12pt, and comfort is relative
+even though the floor is absolute: 9.0 was a tenth off a 10pt base and is a quarter off a 12pt one.
+`plan-base-size.md` D2 predicted exactly this and left it here. **[assumed]** 9.5 is defensible on
+the same evidence — one step wide, and a judgement about reading rather than a measurement.
+
+**Two pairs beyond the plan's three**, because the plan's candidate boundaries (8.0/8.5/9.0) were
+chosen at the 10pt base and all four of those now reflow. The question had moved up with the base.
+
+### It found a defect in T31a, and only by looking
+
+The 9.0 reflow put `integration.destination.verified` **over its column border**. The min-content
+token was being measured as plain text and drawn in mono, which is wider — so the column came out
+slightly too narrow. Fixed by carrying the token's markup, not its text, into the measurement.
+
+**No count would have caught it.** The oracle saw no ink past the margin (**F11**), the census was
+unchanged, every test was green. This is the second defect in two tasks found by rendering a page.
+
 ## Exit criteria
 
-1. Three pairs rendered from real corpus tables and looked at; the comfort floor chosen **by you**.
-2. Whatever changes: `compromise-mechanism.md` §6 re-measured, census regenerated, goldens
-   deliberately updated.
-3. **The overflow count does not rise** — checked with the oracle, not assumed.
-4. F4 closed: the four dead floors resolved in code and in their doc comments.
-5. `verify.sh` green.
+1. ✅ Pairs rendered from real corpus tables and looked at; floor chosen.
+2. ✅ Census regenerated — unchanged, after re-sizing the boundary fixture (below).
+3. ✅ **Overflow did not rise** — checked with the oracle at the new floor.
+4. ✅ F4 closed: `prose_pt` and `code_pt` removed, `table_pt` re-documented as a bound rather than
+   a policy, `image_scale` marked untuned with the reason.
+5. ✅ `verify.sh` green. Goldens **unmoved** — no golden fixture's table sits in the 9.0–10.0 band.
+
+### The boundary fixture had to be re-sized
+
+`shrink-to-comfort-floor.md` was sized to land at exactly 9.0 and pin the `>=` boundary. At a 10.0
+floor it reflowed — and it is **the only fixture that shrinks**, so `the_census_covers_every_
+compromise_kind` went red and the census lost sight of a whole rung. Two characters came off each
+cell to put it back on the boundary at 10.0. The name still describes what it does.
 
 ---
 
 ## Doubts — audited
 
-### D1 · Does a lower comfort floor increase overflow? — **must be measured, not argued**
+### D1 · Does a higher comfort floor increase overflow? — **measured: no**
 
 More reflows means more elements on the rung that can still overflow — **[measured]** 1 of 152
 today, after T29c. At floor 8.0 there would be 112 reflows instead of 152, which is *fewer*; at 9.5,

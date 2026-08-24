@@ -145,7 +145,25 @@ rather than absent.
 
 Before 3f, whose recompile loop is the same shape as the loop that has now died four times.
 
-### F4 · `DEBT` — `Floors::table_pt` is now inert for any table with an alternate
+### F4 · `DEBT` — `Floors::table_pt` is now inert for any table with an alternate · **CLOSED 2026-08-24 (T26c)**
+
+> **Closed by resolving all five floors, not just this one.**
+>
+> - **`prose_pt`, `code_pt` — removed.** **[measured]** never read: `for_class` is called from one
+>   place, that branch runs only for atomic classes, and of those only `Table` reaches it. Removed
+>   while `Floors` is still a Rust type; after 3e loads it from `template.toml` the same removal is a
+>   migration for fields that never did anything.
+> - **`table_pt` — kept, re-documented.** It is not "how small a table may get"; the comfort floor
+>   decides that and sits above it. It bounds the probe's scan and sets the clip marker's text size,
+>   and the doc comment now says so.
+> - **`table_comfort_pt` — 9.0 → 10.0, chosen by eye** against five rendered pairs from real corpus
+>   tables. It moved because the base moved: 9.0 was a tenth off a 10pt base and a quarter off 12pt.
+> - **`image_scale` — left at 0.25 and marked untuned**, because no image in the corpus reaches the
+>   ladder. Tuning it against invented fixtures would be choosing a number and calling it evidence.
+>
+> **[measured]** the result: shrinks 122 → 76, reflows 152 → 198, **0 of the 198 overflow**.
+
+
 
 After T26b a table shrinks only while it stays at or above the 9pt comfort floor; anything below
 wraps instead. So the 7pt hard floor is never consulted for a table that can reflow. It still governs
