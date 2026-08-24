@@ -115,14 +115,18 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 3b2 | Finish the escalation ladder — all atomic classes | ✅ code-complete 2026-08-20 (T14); `/phase-audit` not run | `/phase-audit` |
 | 3c1 | Engine — walking skeleton: one file, disk to disk | ✅ code-complete 2026-08-20 (T15–T17); `/phase-audit` not run | `/phase-audit` |
 | 3c2 | Paths + Output — widen to batch, collisions | ✅ code-complete 2026-08-20 (T19–T21); `/phase-audit` not run | `/phase-audit` |
-| **3d** | **CLI adapter, end to end** | **◐ next — planned in `plan-cli.md` (T25–T26)** | `/phase-audit` |
-
-
-| 3e | Template catalogue + shipped template | planned | `/phase-audit` |
+| 3d | CLI adapter, end to end | ✅ code-complete 2026-08-24 (T25–T31a); `/phase-audit` not run | `/phase-audit` |
+| **3e** | **Template catalogue + shipped template** | **◐ next — unplanned** | `/phase-audit` |
 | 3f | Review — attention gate, overrides | planned | `/phase-audit` |
-| 4 | egui adapter — **host work** | planned | `/phase-audit`, on host |
+| 4 | egui adapter — **the desktop app itself**, host work | planned | `/phase-audit`, on host |
 | 5 | Settings & identity | planned | `/phase-audit` |
 | 6 | Packaging & distribution | planned | operator-owned |
+
+**Everything shipped so far is the engine and a CLI.** md2pdf is a desktop application; phase 4 is
+where it becomes one. 3e and 3f are what stands between here and starting it.
+
+**`/phase-audit` has not been run on any phase since 3a.** Seven phases are marked code-complete
+with the gate unrun — recorded here rather than quietly carried.
 
 ---
 

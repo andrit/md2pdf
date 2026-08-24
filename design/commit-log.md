@@ -862,7 +862,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > checks the ~100x recompile difference a cleared cache produces — robust to any machine noise, and
   > it would have caught both placebo fixes and any future version skew. Proved to fire.
 
-- `<pending>` **feat: say what we cannot draw, and draw what we can** (T28).
+- `eef617a` **feat: say what we cannot draw, and draw what we can** (T28).
 
   > **The task was scoped from what someone saw; measuring found ten times as much.** T28 was
   > *"✅/❌ render as tofu"*. Asking the FontBook about every non-ASCII character in the corpus:
