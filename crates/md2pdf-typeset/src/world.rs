@@ -1,7 +1,7 @@
 //! The `World` implementation. Confined here with everything else typst-shaped.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Duration};
@@ -30,7 +30,7 @@ pub struct TypstWorld {
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     main_id: FileId,
-    main: RefCell<Source>,
+    main: Mutex<Source>,
     /// Virtual files the document may reference — images, in practice.
     ///
     /// Typst cannot load a file the `World` will not serve, and an unresolvable file
@@ -41,12 +41,27 @@ pub struct TypstWorld {
     /// tracks `World::file` accesses and invalidates correctly. Verified — replacing
     /// bytes under the same name changes the next measurement (see
     /// `replacing_bytes_is_not_served_stale` in `tests/contract.rs`).
-    files: RefCell<HashMap<FileId, Bytes>>,
+    files: Mutex<HashMap<FileId, Bytes>>,
 }
 
-// Compilation is driven from one thread at a time; the RefCell never escapes.
-unsafe impl Send for TypstWorld {}
-unsafe impl Sync for TypstWorld {}
+// No `unsafe impl Send/Sync` here, and that is the point.
+//
+// There used to be a pair, justified by a comment: *"compilation is driven from one thread
+// at a time; the RefCell never escapes."* That was true while the only caller was a
+// single-threaded CLI. Phase 4 is a desktop app whose whole shape is a UI thread and a
+// worker, and a `RefCell` shared across those is undefined behaviour rather than a race
+// that shows up as a wrong pixel.
+//
+// Typst's `World` trait requires `Send + Sync`, so the promise could not simply be
+// dropped — but it could be made true. `Mutex` gives both automatically, so the compiler
+// now enforces what the comment used to assert.
+//
+// **[measured]** the cost is nothing: interleaved min-of-3 over the 146-document corpus,
+// `RefCell` 36.0s against `Mutex` 34.7s — within noise, and the lock is if anything
+// marginally ahead. Both readers already cloned their value out, so no guard is ever held
+// across a compilation and the lock is uncontended by construction. (Compared against a
+// binary built from the previous source, not against the 29.7s recorded in §6 on a
+// quieter machine — the point of an A/B is that both halves see the same conditions.)
 
 impl TypstWorld {
     pub fn new() -> Self {
@@ -57,8 +72,8 @@ impl TypstWorld {
             book: LazyHash::new(lib.book),
             fonts: lib.fonts,
             main_id,
-            main: RefCell::new(Source::new(main_id, String::new())),
-            files: RefCell::new(HashMap::new()),
+            main: Mutex::new(Source::new(main_id, String::new())),
+            files: Mutex::new(HashMap::new()),
         }
     }
 
@@ -70,7 +85,7 @@ impl TypstWorld {
     pub fn add_file(&self, name: &str, bytes: Vec<u8>) -> bool {
         match try_file_id(name) {
             Some(id) => {
-                self.files.borrow_mut().insert(id, Bytes::new(bytes));
+                self.files_mut().insert(id, Bytes::new(bytes));
                 true
             }
             None => false,
@@ -85,11 +100,26 @@ impl TypstWorld {
     /// bytes. Clearing per Source would re-register that logo for every document in the
     /// batch and throw away the `comemo` hit this long-lived `World` exists to keep.
     pub fn clear_files(&self) {
-        self.files.borrow_mut().clear();
+        self.files_mut().clear();
     }
 
     pub fn set_source(&self, text: String) {
-        *self.main.borrow_mut() = Source::new(self.main_id, text);
+        *self.main_mut() = Source::new(self.main_id, text);
+    }
+}
+
+impl TypstWorld {
+    /// Locked, recovering from a poisoned lock rather than panicking again.
+    ///
+    /// A panic mid-compilation would poison these, and the data behind them is a source
+    /// string and a file map — there is no invariant a panic could have broken halfway.
+    /// Propagating the poison would turn one failed document into a dead session.
+    fn main_mut(&self) -> std::sync::MutexGuard<'_, Source> {
+        self.main.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn files_mut(&self) -> std::sync::MutexGuard<'_, HashMap<FileId, Bytes>> {
+        self.files.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -111,14 +141,13 @@ impl World for TypstWorld {
     }
     fn source(&self, id: FileId) -> FileResult<Source> {
         if id == self.main_id {
-            Ok(self.main.borrow().clone())
+            Ok(self.main_mut().clone())
         } else {
             Err(FileError::NotFound(id.vpath().get_without_slash().into()))
         }
     }
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        self.files
-            .borrow()
+        self.files_mut()
             .get(&id)
             .cloned()
             .ok_or_else(|| FileError::NotFound(id.vpath().get_without_slash().into()))

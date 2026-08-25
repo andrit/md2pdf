@@ -1,0 +1,16 @@
+[package]
+name = "md2pdf-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# **No egui here, and that is the point.** Everything in this crate is buildable and
+# testable in the container; the GUI shell that cannot be is `md2pdf-gui`, and it should
+# hold no decision about a document. See design/plan-app.md, option C.
+[dependencies]
+md2pdf-domain = { path = "../md2pdf-domain" }
+md2pdf-convert = { path = "../md2pdf-convert" }
+md2pdf-engine = { path = "../md2pdf-engine" }
+md2pdf-paths = { path = "../md2pdf-paths" }
+md2pdf-template = { path = "../md2pdf-template" }
+md2pdf-typeset = { path = "../md2pdf-typeset" }

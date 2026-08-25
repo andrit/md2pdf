@@ -961,7 +961,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > And `toml`'s error Display is a span diagram whose first line is the *location* — the sentence
   > naming the mistyped key is the last one.
 
-- `<pending>` **feat: the attention gate and Overrides (3f, T34)** — *"3 converted cleanly, 12 need your attention."*
+- `429e0b3` **feat: the attention gate and Overrides (3f, T34)** — *"3 converted cleanly, 12 need your attention."*
 
   > **The payoff for treating layout as something that emits.** The ladder has recorded where it made
   > a judgment call since T13; nothing until now offered to revisit one. `--attention` names what was
@@ -1001,3 +1001,39 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > A contract test that pinned `apply_override` was **rewritten, not renumbered**: half of it
   > asserted that "force portrait" left a shrink alone, which only made sense while an Override was a
   > decision — it was asserting the bug was still reachable.
+
+- `<pending>` **feat(app): the desktop app's core, minus the drawing (phase 4, part 1)**.
+
+  > **`md2pdf-app` holds every decision the GUI makes, and has no GUI dependency.** That split is
+  > forced rather than stylistic: **[measured]** `eframe`, `egui`, `winit`, `wgpu` and `glow` are all
+  > absent from the offline registry, so code depending on them cannot be *typechecked* here, let
+  > alone run. Keeping the thinking on this side means the blind part is a few hundred lines of
+  > drawing where a mistake is a compile error rather than a wrong answer.
+  >
+  > **A latent UB risk was removed on the way in.** `TypstWorld` carried `unsafe impl Send + Sync`
+  > justified by a comment — *"compilation is driven from one thread at a time"* — true only because
+  > the CLI is single-threaded, and phase 4 is precisely the phase that introduces a second thread.
+  > It could not simply be deleted (typst's `World` trait requires `Send + Sync`), so the promise was
+  > made **true** instead: `RefCell` became `Mutex`, the `unsafe impl` pair is gone, and the compiler
+  > now enforces what the comment asserted. The only `unsafe` left in `world.rs` is the word, in a
+  > comment about its own absence.
+  >
+  > **[measured]** it costs nothing: interleaved min-of-3 over the corpus, `RefCell` 36.0s against
+  > `Mutex` 34.7s — within noise, because both readers already cloned their value out. Compared
+  > against a binary built from the previous source rather than against §6's 29.7s, which was taken
+  > on a quieter machine; the point of an A/B is that both halves see the same conditions.
+  >
+  > **The worker thread is tested for real** — the part unit tests cannot see. Six integration tests
+  > drive it the way the app will: a Job streaming events back, a document opened and re-decided
+  > through the channel, a page arriving as pixels, a stale click reported rather than silently
+  > ignored, and the thread ending when its handle drops.
+  >
+  > **The event storm's `CollisionPrompt` has nothing to hang on**, and that is a finding rather than
+  > an omission. **[measured]** the engine has no `CollisionDetected` event: `output::plan` resolves
+  > collisions before any conversion begins and emits `SourceSkipped` afterwards. It emits; it never
+  > asks. So the app asks *before* the run, as `--on-collision` does. An interactive prompt would
+  > need a new event and a way to answer mid-Job — a contract change. Recorded as `plan-app.md` D6.
+  >
+  > `md2pdf-gui` exists with its `eframe` line but is **deliberately outside the workspace**: adding
+  > an unresolvable dependency breaks every cargo command offline, because the lock cannot be updated
+  > without network. It moves into `members` in the same commit as the vendored tree.

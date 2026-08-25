@@ -1156,6 +1156,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "md2pdf-app"
+version = "0.1.0"
+dependencies = [
+ "md2pdf-convert",
+ "md2pdf-domain",
+ "md2pdf-engine",
+ "md2pdf-paths",
+ "md2pdf-template",
+ "md2pdf-typeset",
+]
+
+[[package]]
 name = "md2pdf-cli"
 version = "0.1.0"
 dependencies = [
