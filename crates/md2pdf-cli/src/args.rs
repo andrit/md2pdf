@@ -16,9 +16,23 @@ USAGE:
 OPTIONS:
     -o, --output <DIR>        where PDFs are written (required)
         --on-collision <HOW>  skip | rename | overwrite   [default: skip]
+        --template <NAME>     which template to render with  [default: github-print]
+        --templates <DIR>     an extra directory to look for templates in
         --json                emit line-delimited events on stdout
     -q, --quiet               only the final summary, no per-document lines
     -h, --help                print this help
+
+TEMPLATES:
+    A template is a folder holding template.toml. md2pdf looks in --templates,
+    then your config directory, then beside the binary; the first to supply a
+    name wins, so copying the shipped folder into your config directory and
+    editing it replaces the original.
+
+        Linux    ~/.config/md2pdf/templates
+        macOS    ~/Library/Application Support/md2pdf/templates
+        Windows  %APPDATA%\\md2pdf\\templates
+
+    A folder that will not load is reported with the reason, never dropped.
 
 COLLISIONS:
     An output that already exists is never silently replaced. The default is
@@ -39,6 +53,10 @@ pub struct Options {
     pub on_collision: BlanketResolution,
     pub json: bool,
     pub quiet: bool,
+    /// Which template to render with. Resolved against the catalogue, not here.
+    pub template: String,
+    /// An extra directory to search first. Mostly for tests and one-off runs.
+    pub templates: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -80,6 +98,15 @@ pub fn parse(argv: Vec<OsString>) -> Result<Options, ArgsError> {
         },
     };
 
+    let template: String = args
+        .opt_value_from_str("--template")
+        .map_err(|e| ArgsError::Invalid(e.to_string()))?
+        .unwrap_or_else(|| "github-print".to_string());
+
+    let templates: Option<PathBuf> = args
+        .opt_value_from_str("--templates")
+        .map_err(|e| ArgsError::Invalid(e.to_string()))?;
+
     let output: PathBuf = args
         .value_from_str(["-o", "--output"])
         .map_err(|_| ArgsError::Invalid("-o/--output is required".into()))?;
@@ -101,6 +128,8 @@ pub fn parse(argv: Vec<OsString>) -> Result<Options, ArgsError> {
         on_collision,
         json,
         quiet,
+        template,
+        templates,
     })
 }
 

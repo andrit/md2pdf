@@ -227,3 +227,157 @@ fn a_bad_argument_explains_itself() {
         "the error should name the bad value"
     );
 }
+
+// ---------------------------------------------------------------------------------
+// 3e — templates are discovered from disk, never compiled in (`INV-11`).
+// ---------------------------------------------------------------------------------
+
+fn stderr(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stderr).to_string()
+}
+
+/// A template folder, written into a temp directory.
+fn template(tmp: &TempDir, folder: &str, name: &str, base_pt: f64, body_font: &str) {
+    tmp.write(
+        &format!("{folder}/template.toml"),
+        format!(
+            r#"
+name = "{name}"
+[page]
+width_pt = 595.0
+height_pt = 842.0
+margin_pt = 56.0
+[text]
+base_size_pt = {base_pt}
+font_body = "{body_font}"
+font_mono = "JetBrains Mono"
+"#
+        )
+        .as_bytes(),
+    );
+}
+
+#[test]
+fn a_template_from_disk_changes_the_output() {
+    // The whole point of 3e: a folder on disk, no rebuild, a different PDF. Compared by
+    // *size* rather than by rendering, because this test is about the wiring — the page
+    // itself was rendered and looked at, which no assertion can do.
+    let tmp = TempDir::new("cli-template");
+    let source = tmp.write(
+        "notes.md",
+        b"# Title
+
+Some prose that will set differently.
+",
+    );
+    template(&tmp, "tpl/big", "big", 20.0, "Source Sans 3");
+
+    let plain = md2pdf(&[&source, Path::new("-o"), &tmp.join("a")]);
+    assert_eq!(code(&plain), 0, "stderr: {}", stderr(&plain));
+
+    let big = md2pdf(&[
+        &source,
+        Path::new("-o"),
+        &tmp.join("b"),
+        Path::new("--templates"),
+        &tmp.join("tpl"),
+        Path::new("--template"),
+        Path::new("big"),
+    ]);
+    assert_eq!(code(&big), 0, "stderr: {}", stderr(&big));
+
+    // Through the broker: `INV-9` holds in tests, and check-boundaries.sh caught the
+    // first version of this reaching for `std::fs` directly.
+    let broker = md2pdf_paths::PathBroker::new();
+    let a = broker.read_bytes(&tmp.join("a/notes.pdf")).expect("a");
+    let b = broker.read_bytes(&tmp.join("b/notes.pdf")).expect("b");
+    assert_ne!(a, b, "the template made no difference to the output");
+}
+
+#[test]
+fn a_broken_template_is_reported_and_the_others_still_load() {
+    // Rejections are carried, not dropped (`GLOSSARY`, TemplateCatalogue). An author
+    // cannot fix a folder that silently fails to appear.
+    let tmp = TempDir::new("cli-template-broken");
+    let source = tmp.write(
+        "notes.md",
+        b"# Title
+",
+    );
+    template(&tmp, "tpl/fine", "fine", 12.0, "Source Sans 3");
+    tmp.write(
+        "tpl/broken/template.toml",
+        br#"name = "broken"
+not toml at all
+"#,
+    );
+
+    let out = md2pdf(&[
+        &source,
+        Path::new("-o"),
+        &tmp.join("out"),
+        Path::new("--templates"),
+        &tmp.join("tpl"),
+        Path::new("--template"),
+        Path::new("fine"),
+    ]);
+
+    assert_eq!(code(&out), 0, "one bad folder must not fail the run");
+    assert!(tmp.join("out/notes.pdf").is_file());
+    let err = stderr(&out);
+    assert!(err.contains("broken"), "the reject is not named: {err}");
+}
+
+#[test]
+fn a_template_naming_a_font_we_do_not_ship_is_refused_by_name() {
+    // `INV-1`: nothing is ever fetched. Rendering in a silent fallback would look like a
+    // bug in md2pdf rather than a typo in the template.
+    let tmp = TempDir::new("cli-template-font");
+    let source = tmp.write(
+        "notes.md",
+        b"# Title
+",
+    );
+    template(&tmp, "tpl/hel", "hel", 12.0, "Helvetica");
+
+    let out = md2pdf(&[
+        &source,
+        Path::new("-o"),
+        &tmp.join("out"),
+        Path::new("--templates"),
+        &tmp.join("tpl"),
+        Path::new("--template"),
+        Path::new("hel"),
+    ]);
+
+    assert_eq!(code(&out), 2, "an unusable template must not convert");
+    let err = stderr(&out);
+    assert!(err.contains("Helvetica"), "the font is not named: {err}");
+}
+
+#[test]
+fn an_unknown_template_lists_what_was_found() {
+    // "template not found" without the list is the least useful error available.
+    let tmp = TempDir::new("cli-template-unknown");
+    let source = tmp.write(
+        "notes.md",
+        b"# Title
+",
+    );
+    template(&tmp, "tpl/here", "here", 12.0, "Source Sans 3");
+
+    let out = md2pdf(&[
+        &source,
+        Path::new("-o"),
+        &tmp.join("out"),
+        Path::new("--templates"),
+        &tmp.join("tpl"),
+        Path::new("--template"),
+        Path::new("absent"),
+    ]);
+
+    assert_eq!(code(&out), 2);
+    let err = stderr(&out);
+    assert!(err.contains("absent") && err.contains("here"), "{err}");
+    assert!(!tmp.join("out/notes.pdf").is_file(), "wrote output anyway");
+}

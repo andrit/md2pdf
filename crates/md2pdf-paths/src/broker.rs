@@ -113,6 +113,30 @@ impl PathBroker {
         crate::walk::walk(root)
     }
 
+    /// The immediate subdirectories of a directory, sorted.
+    ///
+    /// For the template catalogue: a Template is a *folder*, so discovery lists folders and
+    /// asks each whether it holds a manifest. Sorted because discovery order decides which
+    /// of two same-named templates in one root wins, and `read_dir` order is whatever the
+    /// filesystem feels like — a catalogue that reordered itself between runs would be a
+    /// determinism bug (`INV-7`) hiding in a directory listing.
+    ///
+    /// A missing directory is an error here rather than an empty list: the caller knows
+    /// whether a root is expected to exist, and this crate should not decide for it.
+    pub fn list_dirs(&self, root: &Path) -> Result<Vec<PathBuf>, PathError> {
+        let mut out: Vec<PathBuf> = std::fs::read_dir(root)
+            .map_err(|source| PathError::Read {
+                path: root.to_path_buf(),
+                source,
+            })?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+        out.sort();
+        Ok(out)
+    }
+
     /// What is at this path, if anything.
     ///
     /// One call rather than `exists` then `is_dir`, because a caller deciding *what to

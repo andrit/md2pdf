@@ -11,6 +11,7 @@ use md2pdf_cli::report::Report;
 use md2pdf_domain::Template;
 use md2pdf_engine::{handle, Command, Deps, Event};
 use md2pdf_paths::{PathBroker, PathKind};
+use md2pdf_template::{roots, TemplateCatalogue};
 use md2pdf_typeset::Typesetter;
 
 fn main() -> ExitCode {
@@ -28,7 +29,62 @@ fn main() -> ExitCode {
 
     let broker = PathBroker::new();
     let typesetter = Typesetter::new();
-    let template = Template::default();
+
+    // Templates are discovered, never compiled in (`INV-11`). The font check is handed
+    // to the catalogue rather than performed by it, because only this layer holds both
+    // the FontBook and the catalogue.
+    let catalogue = TemplateCatalogue::discover_with_fonts(
+        &roots::roots(
+            options.templates.clone(),
+            roots::beside_binary(),
+            &roots::Env::current(),
+        ),
+        &broker,
+        &|font| typesetter.font_families().iter().any(|f| f == font),
+    );
+
+    // Reported before anything converts, and to stderr so `--json` stays parseable. A
+    // template that will not load is the author's to fix and they cannot fix what they
+    // cannot see (`GLOSSARY`, TemplateCatalogue).
+    for rejected in &catalogue.rejected {
+        eprintln!(
+            "md2pdf: ignoring template {}: {}",
+            rejected.folder.display(),
+            rejected.reason
+        );
+    }
+
+    let template = match catalogue.get(&options.template) {
+        Some(found) => found.template.clone(),
+        // The shipped template is missing from disk — a development tree, or an install
+        // that lost its `templates/`. Falling back keeps md2pdf working; saying so keeps
+        // it honest, because otherwise an edited template that failed to load looks like
+        // an edit that did nothing.
+        None if options.template == "github-print" => {
+            eprintln!(
+                "md2pdf: no template found on disk, using the built-in defaults{}",
+                if catalogue.found.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (found: {})", catalogue.names().join(", "))
+                }
+            );
+            Template::default()
+        }
+        None => {
+            let known = if catalogue.found.is_empty() {
+                "none were found".to_string()
+            } else {
+                catalogue.names().join(", ")
+            };
+            eprintln!(
+                "md2pdf: no template named {:?} — available: {known}",
+                options.template
+            );
+            return ExitCode::from(2);
+        }
+    };
+
     let deps = Deps {
         broker: &broker,
         typesetter: &typesetter,

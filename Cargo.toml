@@ -5,6 +5,7 @@ members = [
     "crates/md2pdf-convert",
     "crates/md2pdf-typeset",
     "crates/md2pdf-paths",
+    "crates/md2pdf-template",
     "crates/md2pdf-engine",
     "crates/md2pdf-cli",
 ]
@@ -28,6 +29,7 @@ comemo        = "=0.5.1"
 pulldown-cmark = "0.12"
 serde         = { version = "1", features = ["derive"] }
 serde_json    = "1"
+toml          = { version = "0.8", default-features = false, features = ["parse", "display"] }
 thiserror     = "2"
 
 # Full debuginfo made the linker run out of memory. Each test binary statically links

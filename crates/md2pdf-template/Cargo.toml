@@ -1,0 +1,11 @@
+[package]
+name = "md2pdf-template"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+md2pdf-domain = { path = "../md2pdf-domain" }
+md2pdf-paths = { path = "../md2pdf-paths" }
+serde = { workspace = true }
+toml = { workspace = true }

@@ -14,6 +14,7 @@ path = "src/main.rs"
 md2pdf-engine = { path = "../md2pdf-engine" }
 md2pdf-domain = { path = "../md2pdf-domain" }
 md2pdf-paths = { path = "../md2pdf-paths" }
+md2pdf-template = { path = "../md2pdf-template" }
 md2pdf-typeset = { path = "../md2pdf-typeset" }
 serde_json = { workspace = true }
 # Already in the graph via typst, so declaring it directly costs no new crates. `clap`

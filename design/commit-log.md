@@ -895,7 +895,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > (monochrome, OFL, subsettable to a few KB) against Noto Color Emoji and Twemoji, and recommends
   > the first. Adding the file retires the substitution and the test that says so is already written.
 
-- `<pending>` **feat(typeset): bundle Noto Emoji; the corpus has no tofu left** (T28 completion).
+- `110047a` **feat(typeset): bundle Noto Emoji; the corpus has no tofu left** (T28 completion).
 
   > **21 uncovered characters → 0**, with one 880 KB face. The operator supplied Noto Emoji, which
   > was the option `plan-glyphs.md` recommended and could not take on its own — `INV-1` forbids
@@ -916,3 +916,47 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > always worked — box drawing appears in 46 documents and losing it would be worse than the tofu.
   >
   > Rendered and looked at: ✅ ❌ 🤔 🔴 all draw, and the test document reports zero compromises.
+
+- `<pending>` **feat(template): discover templates from disk (3e, T32)** — `INV-11` is finally true.
+
+  > **`INV-11` said templates are never compiled in. They were.** `templates/github-print/` has been
+  > an empty directory since it was created and `Template::default()` was a Rust constructor, so the
+  > invariant has been false for as long as it has been written down.
+  >
+  > A new `md2pdf-template` crate discovers folders holding `template.toml` across **three roots** —
+  > `--templates`, the user's config directory, then beside the binary — merged, first name winning.
+  > So copying the shipped folder into your config directory and editing it *replaces* the original,
+  > while everything you did not copy still appears.
+  >
+  > **The config directory was the operator's call and it was the right one.** I proposed deferring
+  > it to phase 5 and shipping `./templates`; they pointed out that md2pdf is a personal tool, the
+  > config directory is where a personal tool keeps things, and deferring means shipping a location
+  > we already know is wrong and then migrating anyone who used it. Resolved by hand — **[measured]**
+  > neither `dirs` nor `directories` is in the offline registry and `INV-1` forbids fetching one — as
+  > a pure function of the environment, so all three platforms are testable from this one.
+  >
+  > **Refusals are carried, not dropped.** A broken template is named with the TOML complaint, an
+  > unavailable font with the font, and an unknown `--template` lists what was found. `deny_unknown_
+  > fields` refuses a mistyped key rather than ignoring it — the author who writes `margin_pts` and
+  > sees no change has nothing to go on.
+  >
+  > **The font check could not live where the plan put it.** Knowing which fonts exist means holding
+  > the FontBook, which lives in the one crate allowed to link typst. So the predicate is a parameter
+  > and the rejection still lands in the catalogue. Dependencies passed rather than reached for,
+  > arriving as a constraint rather than a preference.
+  >
+  > **Only `template.toml`, not the `template.typ` the GLOSSARY also specifies** — that is **T33**,
+  > and its content is a correctness risk rather than loading code: a show-rule the RenderPass applies
+  > and the ProbePass does not would make every measurement wrong, which is the shape of the four
+  > estimator defects T29–T31a cost a week. Named rather than omitted.
+  >
+  > **Looked at, not asserted:** a copied folder with `base_size_pt = 16` on US Letter renders
+  > visibly larger type on a 612×792 page. The goldens did not move, because
+  > `the_file_that_ships_is_the_rust_default` reads the real file through `include_str!` and pins it
+  > to the constructor — otherwise the same document would render differently depending on whether a
+  > directory happened to exist.
+  >
+  > Two tests were wrong in instructive ways. `PathBuf::join` uses the *running* platform's separator,
+  > so the Windows assertion failed on Linux against correct behaviour; it now checks structure.
+  > And `toml`'s error Display is a span diagram whose first line is the *location* — the sentence
+  > naming the mistyped key is the last one.

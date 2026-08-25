@@ -63,9 +63,12 @@ inside that crate, not a rewrite across the tree.
 **INV-10 · Only `md2pdf-typeset` links the typst crate.**
 Everything crossing that boundary is a domain type. Upgrading Typst touches one crate.
 
-**INV-11 · Templates are swappable config, discovered from a directory.**
+**INV-11 · Templates are swappable config, discovered from a directory.** *(true since 3e)*
 Not compiled in. A user-authored template is first-class; the shipped one is also the reference
-example.
+example. Three roots — an explicit `--templates`, the user's config directory, then beside the
+binary — merged, with the first to supply a name winning. `Template::default()` survives only as the
+fallback when nothing is on disk, and `the_file_that_ships_is_the_rust_default` pins the two
+together so the same document cannot render differently depending on whether a directory existed.
 
 **INV-12 · Batch output mirrors the source tree.**
 Never flattened.

@@ -16,3 +16,4 @@ thiserror = { workspace = true }
 # format. serde_json is here only to prove the types round-trip (INV-8).
 [dev-dependencies]
 serde_json = { workspace = true }
+md2pdf-template = { path = "../md2pdf-template" }

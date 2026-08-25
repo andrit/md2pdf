@@ -1,0 +1,66 @@
+# github-print — the shipped Template, and the reference example.
+#
+# Copy this folder to your own templates directory and edit it. md2pdf finds templates in
+# three places, and the first to supply a name wins:
+#
+#   1. --templates <dir>                     an explicit directory
+#   2. <config>/md2pdf/templates/            yours
+#        Linux    ~/.config/md2pdf/templates
+#        macOS    ~/Library/Application Support/md2pdf/templates
+#        Windows  %APPDATA%\md2pdf\templates
+#   3. templates/ beside the binary          this one
+#
+# So a copy of this folder in (2), keeping the name, replaces this file entirely. Change
+# the `name` instead and you get both.
+#
+# Every value here is a Token: a named design value. Nothing in this file supplies
+# structure or content — a Template is a print stylesheet.
+
+name = "github-print"
+description = "GitHub's rendering, sized for print"
+
+[page]
+# A4 in points. US Letter is 612 x 792.
+width_pt = 595.0
+height_pt = 842.0
+# 56pt is about 2cm. Wider margins shorten the line, which is worth doing: at 12pt this
+# page runs to ~80 characters, at the top of the 45-75 band that reads comfortably.
+margin_pt = 56.0
+
+[text]
+# The size the template is *trying* to achieve, not a starting point to negotiate down
+# from. 12pt matches GitHub's 16px body, which is what this template exists to reproduce.
+#
+# Every reduction md2pdf makes is a departure from this number and gets recorded as a
+# Compromise. That only means something if the number was chosen — it was 10.0 for no
+# recorded reason until it was measured. See design/plan-base-size.md.
+base_size_pt = 12.0
+
+# Both must be families md2pdf ships: nothing is ever fetched, and a name that is not in
+# the FontBook is refused at load rather than silently falling back.
+# Available: "Source Sans 3", "JetBrains Mono", "Noto Emoji",
+#            "New Computer Modern", "Libertinus Serif", "DejaVu Sans Mono".
+font_body = "Source Sans 3"
+font_mono = "JetBrains Mono"
+
+# The floors bound md2pdf's escalation ladder — how far it may reduce an element that
+# does not fit before trying something else. They are the ladder's limits rather than the
+# page's design, and most templates should leave them alone. Omit the section entirely to
+# take these values.
+[floors]
+# How small a table may get before md2pdf gives up shrinking it altogether. Also the text
+# size of the marker drawn when even a landscape page will not do.
+table_pt = 7.0
+
+# The size below which *wrapping reads better than shrinking further*. A table that would
+# land under this reflows at full size instead.
+#
+# 10.0 was chosen by eye against five real tables rendered both ways: at 9pt and below the
+# wrapped version wins, at 10pt and above the shrunk one does. It moved with the base size
+# — a quarter off 12pt is a visibly bigger step than a tenth off 10pt was. If you raise
+# `base_size_pt`, consider raising this. See design/plan-floors.md.
+table_comfort_pt = 10.0
+
+# Smallest an image may be scaled before md2pdf rotates the page instead. A scale, not a
+# point size. Untuned: no image in the measured corpus ever reached this rung.
+image_scale = 0.25

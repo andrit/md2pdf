@@ -107,7 +107,19 @@ mod tests {
         // Through the broker, not `std::fs`: INV-9 holds for debugging tools too, and
         // check-boundaries.sh caught this file the first time it was written.
         let broker = md2pdf_paths::PathBroker::new();
-        let template = Template::default();
+        // `LOOK_TEMPLATE=<path to template.toml>` renders through a real template rather
+        // than the built-in defaults — which is how a template change gets *looked at*
+        // rather than asserted (3e exit criterion 1).
+        let template = match std::env::var("LOOK_TEMPLATE") {
+            Ok(path) => md2pdf_template::TemplateFile::parse(
+                &broker
+                    .read_to_string(std::path::Path::new(&path))
+                    .expect("template"),
+            )
+            .expect("template parses")
+            .to_template(),
+            Err(_) => Template::default(),
+        };
         let markdown = broker
             .read_to_string(std::path::Path::new(&src))
             .expect("source");
