@@ -10,13 +10,42 @@ path = "src/main.rs"
 
 [dependencies]
 # The only crate in the workspace that depends on a GUI toolkit, and the only one that
-# cannot be built in the container: eframe links system GL/X11 libraries this image does
-# not have. Everything it draws is decided in `md2pdf-app`, which is why this stays thin.
-# 0.29.1, confirmed by `cargo add` resolving to it with network available — not the
-# guess it started as. It was written here from memory, then asserted to be two years
-# stale, and neither claim was checkable offline; the second one cost a re-vendor to
+# cannot be linked in the container: eframe needs system GL/X11 libraries this image does
+# not have. It is typechecked here against the vendored sources and linked on the host.
+# Everything it draws is decided in `md2pdf-app`, which is why this stays thin.
+#
+# **Version:** 0.29.1, confirmed by `cargo add` resolving to it with network available.
+# It began as a guess written from memory, which I then asserted was two years stale —
+# neither claim was checkable offline, and the second cost a pointless re-vendor to
 # disprove. `vendor/eframe/Cargo.toml` is the thing to read.
-eframe = { version = "0.29", default-features = false, features = ["default_fonts", "glow"] }
+#
+# **Features chosen against that file, not from memory.** eframe's defaults are
+# `accesskit, default_fonts, glow, wayland, web_screen_reader, winit/default, x11`. This
+# takes all of them except `web_screen_reader` (web-only), and takes them *explicitly*
+# rather than via the default set for one reason: the defaults contain
+# `egui-wgpu?/fragile-send-sync-non-atomic-wasm`. I predicted that naming them explicitly
+# would keep `wgpu` out of the vendored tree; **that was wrong** — it is vendored either
+# way, along with `accesskit_windows` and 277 MB of Windows crates behind it, because
+# `cargo vendor` takes every package in the lock including optional ones.
+#
+# **[measured]** what actually matters is unaffected: `cargo tree -e normal` shows zero
+# `wgpu`/`naga` in the *enabled* tree, so none of it is compiled and none of it ships.
+# The cost is 979 MB of gitignored disk.
+#
+# `accesskit` is what makes the app usable with VoiceOver; `x11` and `wayland` are what
+# let it open a window on Linux at all. An earlier version of this line dropped all three
+# as an unforced optimisation, also written from memory.
+#
+# **Changing this line requires a re-vendor.** The vendored tree is pinned to the exact
+# feature set it was created with, so cargo re-resolves on any change — even removing a
+# feature — and then cannot find packages that are not in `vendor/`.
+eframe = { version = "0.29", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "accesskit",
+    "x11",
+    "wayland",
+] }
 egui = "0.29"
 
 md2pdf-app = { path = "../md2pdf-app" }

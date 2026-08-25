@@ -1038,7 +1038,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > an unresolvable dependency breaks every cargo command offline, because the lock cannot be updated
   > without network. It moves into `members` in the same commit as the vendored tree.
 
-- `<pending>` **chore: vendor the GUI tree, split the gate, and keep 658 MB out of git** (phase 4, part 2).
+- `2322e58` **chore: vendor the GUI tree, split the gate, and keep it out of git** (phase 4, part 2).
 
   > **`md2pdf-gui` joins the workspace and `eframe` is vendored**, which is what makes the rest of
   > phase 4 verifiable: **[measured]** `cargo check -p md2pdf-gui` now passes in the container, so
@@ -1063,3 +1063,38 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > size was unchanged: the version was current all along. Both halves — the guessed value and the
   > guessed staleness — are the same error, a belief crossing into an instruction without being
   > checked or labelled unverifiable.
+
+- `<pending>` **feat(gui): md2pdf as a window (phase 4, part 3)**.
+
+  > **The whole app in ~380 lines, because everything it decides was decided elsewhere.**
+  > `md2pdf-gui` owns an `App`, a `Worker` and one texture; `md2pdf-app` owns the state machine,
+  > and no widget contains an `if` about a document. That split is what made this file — the only
+  > one the container cannot link — safe to write.
+  >
+  > **It compiled on the first attempt**, which is the whole return on vendoring: the API came from
+  > reading `vendor/eframe` and `vendor/egui` rather than from memory. `run_native`'s signature,
+  > `AppCreator` returning `Result`, `ColorImage::from_rgba_unmultiplied`, `load_texture`,
+  > `ViewportBuilder::with_inner_size`, `id_salt` — every one checked before it was typed. Two
+  > clippy lints were the entire correction.
+  >
+  > **The widgets carry the event storm's names** — `source_list`, `template_catalogue`,
+  > `attention_list`, `adjustment_panel`, `preview`, `batch_progress`. `AttentionList` in the domain
+  > is `attention_list()` in the window, never `WarningsPanel` (`GLOSSARY`).
+  >
+  > **Three things are handled that `cargo check` cannot see**, and they are the reason the first
+  > Mac run may still surface something. `ctx.request_repaint()` fires whenever the worker sent
+  > anything, because egui draws lazily and a batch finishing while the window is idle would
+  > otherwise leave stale state on screen until the mouse moved. Texture upload happens inside
+  > `update()`, on the UI thread, which is why the worker sends plain RGBA and never touches a
+  > context. And `PREVIEW_SCALE` is documented against `load_texture`'s `debug_assert` on maximum
+  > texture side — a larger value panics in a debug build rather than degrading.
+  >
+  > **No file dialog, deliberately.** Sources arrive by drag and drop, which `egui` already reports
+  > and which costs no dependency — and a third vendor round for `rfd` would have cost more than the
+  > interaction is worth. Destination is a dropped folder or a typed path.
+  >
+  > **Also corrected here:** the manifest claimed `[measured]` that naming eframe's features
+  > explicitly kept `wgpu` out of the vendored tree. It does not — `cargo vendor` takes every package
+  > in the lock including optional ones, so `wgpu`, `naga` and 277 MB of Windows crates behind
+  > `accesskit_windows` are on disk. **[measured]** what matters is unchanged: `cargo tree -e normal`
+  > shows zero `wgpu`/`naga` in the enabled tree, so none of it compiles and none of it ships.
