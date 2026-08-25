@@ -496,15 +496,11 @@ impl Emitter<'_> {
                     // An End we did not open: the caller's frame will handle it.
                 }
                 Event::Start(tag) => out.push_str(&self.element(tag, events)),
-                Event::Text(t) => {
-                    let t = self.drawable(t);
-                    out.push_str(&escape(&self.maybe_break(&t, false)));
-                }
+                Event::Text(t) => out.push_str(&escape(&self.maybe_break(t, false))),
                 Event::Code(t) => {
-                    let t = self.drawable(t);
                     out.push_str(&format!(
                         "#raw(\"{}\")",
-                        escape_string(&self.maybe_break(&t, true))
+                        escape_string(&self.maybe_break(t, true))
                     ));
                 }
                 Event::SoftBreak => out.push(' '),
@@ -675,27 +671,6 @@ impl Emitter<'_> {
             // GFM renders an undefined reference as literal text.
             None => escape(&format!("[^{label}]")),
         }
-    }
-
-    /// Swap in characters the fonts can actually draw, and record that we did.
-    ///
-    /// Applied before breaking and escaping, so a substituted character is broken and
-    /// escaped exactly like any other. One Compromise per *character kind* per element,
-    /// not per occurrence — see `glyphs::substitute`.
-    fn drawable(&mut self, text: &str) -> String {
-        let (out, replaced) = crate::glyphs::substitute(text);
-        for name in replaced {
-            let construct = format!("no glyph for {name}; substituted a plain one");
-            if !self
-                .pending
-                .iter()
-                .any(|k| matches!(k, CompromiseKind::UnsupportedConstruct { construct: c } if *c == construct))
-            {
-                self.pending
-                    .push(CompromiseKind::UnsupportedConstruct { construct });
-            }
-        }
-        out.into_owned()
     }
 
     fn unsupported(&mut self, construct: String) {

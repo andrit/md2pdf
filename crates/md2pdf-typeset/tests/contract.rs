@@ -827,56 +827,15 @@ const CORPUS_CHARACTERS: &[(char, &str)] = &[
         '☑',
         "ballot box checked U+2611 — emitted by convert for task lists",
     ),
-];
-
-/// The two that have no glyph, and are therefore substituted before they reach here.
-///
-/// Kept as a list rather than deleted: if a future FontBook covers them, this test goes
-/// red and the substitution can be retired rather than lingering as a rewrite nobody
-/// needs any more.
-const SUBSTITUTED_AWAY: &[(char, &str)] = &[
     ('✅', "white heavy check mark U+2705 — 28 of 146 documents"),
     ('❌', "cross mark U+274C — 8 of 146 documents"),
+    ('❓', "question mark ornament U+2753"),
+    ('❗', "exclamation mark ornament U+2757"),
+    ('🔴', "red circle U+1F534 — 7 of 146 documents"),
+    ('📋', "clipboard U+1F4CB"),
+    ('🤔', "thinking face U+1F914"),
+    ('😊', "smiling face U+1F60A"),
 ];
-
-#[test]
-fn the_substituted_characters_are_still_the_ones_that_need_it() {
-    let ts = Typesetter::new();
-    let covered: Vec<char> = SUBSTITUTED_AWAY
-        .iter()
-        .map(|(c, _)| *c)
-        .filter(|c| ts.uncovered([*c]).is_empty())
-        .collect();
-    assert!(
-        covered.is_empty(),
-        "the FontBook now covers {covered:?} — the substitution in md2pdf-convert is no \
-         longer needed and should be retired rather than left rewriting the author's text"
-    );
-}
-
-/// The two halves of T28 must not drift apart.
-///
-/// `md2pdf-convert` decides what `✅` *means* when it cannot be drawn; this crate knows
-/// what can be drawn. Neither can check the other at compile time — `convert` has no
-/// fonts by design and must keep none. So the seam is checked here: every replacement
-/// `convert` chose must be a character the shipped FontBook actually covers.
-///
-/// Without this, swapping a font could turn one tofu into a different tofu and every
-/// test would still pass.
-#[test]
-fn every_substitution_target_can_actually_be_drawn() {
-    let ts = Typesetter::new();
-    let targets: Vec<char> = md2pdf_convert::glyphs::SUBSTITUTIONS
-        .iter()
-        .map(|(_, to, _)| *to)
-        .collect();
-    assert!(!targets.is_empty(), "the substitution table is empty");
-    let missing = ts.uncovered(targets);
-    assert!(
-        missing.is_empty(),
-        "convert substitutes in characters this FontBook cannot draw either: {missing:?}"
-    );
-}
 
 #[test]
 fn every_character_the_corpus_uses_has_a_glyph() {

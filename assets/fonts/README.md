@@ -8,6 +8,22 @@ Vendored, not fetched at build time, so builds are reproducible and offline.
 | `SourceSans3-It.ttf` | Source Sans 3 | body, italic (static) | SIL OFL 1.1 |
 | `SourceSans3-BoldIt.ttf` | Source Sans 3 | body, bold italic (static) | SIL OFL 1.1 |
 | `JetBrainsMono.ttf` | JetBrains Mono | code — variable `wght` | SIL OFL 1.1 |
+| `NotoEmoji-Regular.ttf` | Noto Emoji | emoji fallback, **monochrome** | SIL OFL 1.1 |
+
+## Noto Emoji — Regular only, of six weights (T28, 2026-08-24)
+
+**[measured]** 21 characters across a 146-document corpus had no glyph in any shipped
+face and rendered as **tofu** — an empty box where the author put a tick, a cross or a
+face. `✓ ✗ ⚠ → ▸` and box drawing were always fine; everything with *emoji presentation*
+was missing. Adding this one face takes the corpus from 21 uncovered to **0**.
+
+Six weights were available and only Regular is vendored. Emoji here are inline symbols in
+body text, not typography that needs a weight axis, and Typst falls back to this face from
+bold text without complaint. The other five plus the variable font would add ~4.6 MB to
+every binary to make a bold ✅ very slightly bolder.
+
+**Monochrome, not colour.** Same register as the rest of the page, and it needs no
+colour-font support to verify. `design/plan-glyphs.md` costs the colour alternatives.
 
 ## Italic needs its own files — corrected 2026-08-18
 

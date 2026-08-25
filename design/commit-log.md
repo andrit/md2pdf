@@ -894,3 +894,25 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > are offline and reproducible. Blocked, not declined: `design/plan-glyphs.md` costs Noto Emoji
   > (monochrome, OFL, subsettable to a few KB) against Noto Color Emoji and Twemoji, and recommends
   > the first. Adding the file retires the substitution and the test that says so is already written.
+
+- `<pending>` **feat(typeset): bundle Noto Emoji; the corpus has no tofu left** (T28 completion).
+
+  > **21 uncovered characters → 0**, with one 880 KB face. The operator supplied Noto Emoji, which
+  > was the option `plan-glyphs.md` recommended and could not take on its own — `INV-1` forbids
+  > build-time fetching and no emoji font existed on the machine.
+  >
+  > **Regular only, of the six weights supplied.** Emoji here are inline symbols in body text, not
+  > typography needing a weight axis, and Typst falls back to this face from bold without complaint.
+  > The other five plus the variable font would add ~4.6 MB to every binary for a slightly bolder ✅.
+  >
+  > **The substitution is deleted, and it deleted itself.** `the_substituted_characters_are_still_
+  > the_ones_that_need_it` went red the moment the font landed — written a few hours earlier for
+  > exactly this. Rewriting `✅` into `✓` was defensible only while the original could not be drawn;
+  > keeping it now would be a silent rewrite nobody needs. **A fallback with no exit condition
+  > becomes permanent**, so the exit condition was written first.
+  >
+  > **The reporting stays**, because it is the part that survives any font: it needs no table and
+  > covers whatever this face also lacks. The coverage gate now names all 21 alongside the ones that
+  > always worked — box drawing appears in 46 documents and losing it would be worse than the tofu.
+  >
+  > Rendered and looked at: ✅ ❌ 🤔 🔴 all draw, and the test document reports zero compromises.

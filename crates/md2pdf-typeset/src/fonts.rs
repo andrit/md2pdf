@@ -23,6 +23,23 @@ const JETBRAINS_MONO: &[u8] = include_bytes!("../../../assets/fonts/JetBrainsMon
 /// variable one reports its family as `SourceSans3VF` while the roman reports
 /// `Source Sans 3`. Typst groups faces by family name, so the mismatched pair would
 /// never have been recognised as one family and the bug would have survived the fix.
+/// Emoji-presentation characters, monochrome (T28).
+///
+/// **[measured]** 21 characters in a 146-document corpus had no glyph in any shipped
+/// face and rendered as tofu — an empty box where the author put a tick, a cross, or a
+/// face. `✓ ✗ ⚠ → ▸` and box drawing were always fine; what was missing was everything
+/// with emoji presentation.
+///
+/// **Regular only, of the six weights available.** Emoji here are inline symbols in body
+/// text, not typography that needs a weight axis, and Typst falls back to this face from
+/// bold text without complaint. The other five weights and the variable font would add
+/// ~4.6 MB to every binary to make a bold ✅ very slightly bolder.
+///
+/// **Monochrome deliberately.** It is the same register as the rest of the page — black
+/// on white — and it needs no colour-font support to verify. `design/plan-glyphs.md`
+/// costs the colour alternatives.
+const NOTO_EMOJI: &[u8] = include_bytes!("../../../assets/fonts/NotoEmoji-Regular.ttf");
+
 const SOURCE_SANS_3_ITALIC: &[u8] = include_bytes!("../../../assets/fonts/SourceSans3-It.ttf");
 const SOURCE_SANS_3_BOLD_ITALIC: &[u8] =
     include_bytes!("../../../assets/fonts/SourceSans3-BoldIt.ttf");
@@ -48,6 +65,7 @@ impl FontLibrary {
             SOURCE_SANS_3_ITALIC,
             SOURCE_SANS_3_BOLD_ITALIC,
             JETBRAINS_MONO,
+            NOTO_EMOJI,
         ] {
             let data = Bytes::new(bytes.to_vec());
             for (i, info) in FontInfo::iter(&data).enumerate() {

@@ -14,6 +14,3 @@ typst-kit = { workspace = true }
 comemo = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-
-[dev-dependencies]
-md2pdf-convert = { path = "../md2pdf-convert" }

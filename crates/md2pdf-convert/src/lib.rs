@@ -24,7 +24,6 @@ pub mod escape;
 // relative-path resolution; remote-image policy
 pub mod images;
 // pulldown-cmark -> internal event stream
-pub mod glyphs;
 pub mod parse;
 
 use std::collections::BTreeMap;

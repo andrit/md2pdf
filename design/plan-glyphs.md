@@ -31,27 +31,41 @@ and the other was measured. Everything else the corpus uses is covered — `✓ 
 **This kills substitution as *the* answer.** `✅ → ✓` is a good trade. There is no plain-text
 equivalent of 😊, and inventing one would be worse than admitting we cannot draw it.
 
-## What was built
+## What shipped
 
-**1 · Substitute where there is an honest equivalent.** `md2pdf-convert::glyphs` maps `✅ → ✓` and
-`❌ → ✗` — the same marks without emoji presentation. That is 36 of the 146 documents, the two
-commonest by a wide margin. Colour is lost, so it is **recorded as a Compromise**, not done quietly.
+**1 · The font, which makes all 21 draw.** See below — it landed the same day and deleted the
+substitution that had been written first.
 
-**2 · Report everything else.** The engine asks the Typesetter which characters have no glyph and
+**2 · Report anything still uncovered.** The engine asks the Typesetter which characters have no glyph and
 raises a Compromise for each. **This is the part that generalises**: it needs no table, no font, and
 covers a character nobody has seen yet. `INV-4`'s promise is that an empty Diagnostic means the
 document converted cleanly — 19 characters rendering as boxes while the Diagnostic stayed empty was
 a straightforward breach of it.
 
-**3 · Tests that cannot drift.** `convert` holds the editorial decision (*what does ✅ mean?*) and
-has no fonts by design; `typeset` holds the typographic fact (*can anything draw it?*). The seam is
-checked from `typeset`'s contract tests: every substitution target must be covered, and the
-substituted originals must still be the ones that need it — so a FontBook that gained emoji turns a
-test red and the rewrite gets retired rather than lingering.
+**3 · A gate on coverage.** `every_character_the_corpus_uses_has_a_glyph` names every character the
+corpus contains, the working ones included — box drawing inside code fences appears in 46 documents
+and losing it would be worse than the tofu was. A FontBook change that drops any of them goes red.
 
-## What was **not** built: a bundled fallback font
+## The bundled font — **added 2026-08-24, and it retired the substitution**
 
-**This is the real fix, and it is blocked here rather than declined.** **[measured]** there is no
+The operator supplied Noto Emoji. `NotoEmoji-Regular.ttf` is vendored, and **[measured]** the corpus
+goes from **21 uncovered characters to 0**. Every emoji now draws its own glyph.
+
+**The substitution is deleted, not kept as a fallback.** `the_substituted_characters_are_still_the_
+ones_that_need_it` went red the moment the font landed — which is exactly what it was written to do.
+Rewriting an author's `✅` into `✓` was defensible only while we could not draw the original; it is
+not defensible now, and leaving it would have been a silent rewrite nobody needed.
+
+**The reporting stays.** It is the general answer: it needs no table and no font, and it covers the
+next character this font also lacks.
+
+**Regular only, of the six weights supplied.** Emoji here are inline symbols, not typography needing
+a weight axis, and Typst falls back from bold without complaint — the other five plus the variable
+font would add ~4.6 MB per binary for a slightly bolder ✅.
+
+### The original analysis, kept
+
+**This was the real fix, and it was blocked rather than declined.** **[measured]** there is no
 emoji font anywhere on this machine, and `INV-1` means no build-time fetching — the FontBook is
 vendored precisely so builds are reproducible and offline. The file has to be added deliberately.
 
@@ -76,21 +90,20 @@ about what a font file contained cost a live bug that no test could see.
 ## Exit criteria
 
 1. ✅ Coverage measured exhaustively rather than by eye — 21, not 2.
-2. ✅ The two commonest substituted, and the substitution **reported** rather than silent.
-3. ✅ Every remaining uncovered character reported, so `INV-4` holds.
-4. ✅ Rendered and looked at: `✓` and `✗` draw correctly, 🤔 and 🔴 still box **and now say so**.
-5. ✅ Anti-drift tests across the `convert`/`typeset` seam.
+2. ✅ Every uncovered character reported, so `INV-4` holds — the part that survives any font.
+3. ✅ Rendered and looked at: ✅ ❌ 🤔 🔴 all draw their own glyph; the test document is now clean.
+4. ✅ A coverage gate naming every character the corpus uses.
 6. ✅ `verify.sh` green.
-7. ☐ **Bundle Noto Emoji** — needs the file. Operator's call; the analysis is above.
+7. ✅ **Noto Emoji bundled** — 21 uncovered → **0**, and the substitution retired itself.
 
 ## Doubts — audited
 
-### D1 · Is rewriting the author's characters acceptable? — **only because it is recorded**
+### D1 · Was rewriting the author's characters acceptable? — **moot, and it did not survive the day**
 
-Substitution changes what the document says, which is the one thing a converter should be most
-careful about. It is defensible here because the alternative is a box that says nothing at all, and
-because the Diagnostic names it. **[assumed]** it stops being defensible the moment a bundled font
-makes it unnecessary, which is why the test that would retire it was written now.
+Substitution changed what the document said, which is the thing a converter should be most careful
+about. It was defensible only while the original could not be drawn, and the test written to detect
+that condition ending fired within hours. **The lesson worth keeping is that the retirement was
+designed in before it was needed** — a fallback with no exit condition becomes permanent.
 
 ### D2 · Does U+FE0F matter? — **[assumed] no, but it is in the count**
 
