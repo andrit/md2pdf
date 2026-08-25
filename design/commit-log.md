@@ -1002,7 +1002,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > asserted that "force portrait" left a shrink alone, which only made sense while an Override was a
   > decision — it was asserting the bug was still reachable.
 
-- `<pending>` **feat(app): the desktop app's core, minus the drawing (phase 4, part 1)**.
+- `83d8177` **feat(app): the desktop app's core, minus the drawing (phase 4, part 1)**.
 
   > **`md2pdf-app` holds every decision the GUI makes, and has no GUI dependency.** That split is
   > forced rather than stylistic: **[measured]** `eframe`, `egui`, `winit`, `wgpu` and `glow` are all
@@ -1037,3 +1037,29 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `md2pdf-gui` exists with its `eframe` line but is **deliberately outside the workspace**: adding
   > an unresolvable dependency breaks every cargo command offline, because the lock cannot be updated
   > without network. It moves into `members` in the same commit as the vendored tree.
+
+- `<pending>` **chore: vendor the GUI tree, split the gate, and keep 658 MB out of git** (phase 4, part 2).
+
+  > **`md2pdf-gui` joins the workspace and `eframe` is vendored**, which is what makes the rest of
+  > phase 4 verifiable: **[measured]** `cargo check -p md2pdf-gui` now passes in the container, so
+  > every line of the GUI is typechecked here before it reaches a machine that can run it.
+  >
+  > **`vendor/` and `.cargo/` are gitignored, together.** The tree is **658 MB**, and **[measured]**
+  > 329 MB of that is Windows and web crates — `winapi` x2, four `windows-sys` versions, `web-sys`,
+  > `wasm-*` — which no macOS or Linux build can reach: `cargo vendor` takes everything in the lock
+  > across every target and offers no filter. Git never forgets, so committing it would put 658 MB in
+  > every future clone. They are ignored *as a pair* because a committed `.cargo/config.toml` pointing
+  > at an absent `vendor/` breaks a fresh clone with a confusing error. Regenerating is two commands,
+  > recorded in `.gitignore` itself.
+  >
+  > **The gate now typechecks the GUI without linking it.** `clippy`, `test` and `build` take
+  > `--exclude md2pdf-gui`; a new `gui-check` step runs `cargo check -p md2pdf-gui`. **[measured]**
+  > this container has zero GL/X11 libraries, so linking is impossible here — but that is a fact about
+  > the image, not the code, and a type error in the GUI still turns the gate red.
+  >
+  > **A wasted round-trip, recorded because the cause is worth keeping.** I wrote `eframe = "0.29"`
+  > into the manifest from memory, then asserted it was "two years stale" and sent the operator to
+  > re-run `cargo add` and re-vendor. **[measured]** `vendor/eframe/Cargo.toml` says 0.29.1 and the
+  > size was unchanged: the version was current all along. Both halves — the guessed value and the
+  > guessed staleness — are the same error, a belief crossing into an instruction without being
+  > checked or labelled unverifiable.

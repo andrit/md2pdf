@@ -13,7 +13,19 @@ step "boundaries"  ./scripts/check-boundaries.sh
 # written to catch.
 step "commit-log"  ./scripts/commit-log.sh
 step "fmt"         cargo fmt --all -- --check
-step "clippy"      cargo clippy --workspace --all-targets -- -D warnings
+
+# `md2pdf-gui` is excluded from every step that *links*, and only from those.
+#
+# It is the one crate that cannot be linked in the container: `eframe` needs system GL
+# and X11 libraries this image does not have, and `ldconfig` finds none. That is a fact
+# about the image, not about the code — so the gate typechecks it (`check` does not
+# link) and leaves the linking to the host, which is also the only place it can run.
+#
+# Excluding it from `clippy`/`test`/`build` rather than skipping it entirely is the
+# distinction that matters: a type error in the GUI still turns this red.
+GUI=md2pdf-gui
+step "clippy"      cargo clippy --workspace --exclude $GUI --all-targets -- -D warnings
+step "gui-check"   cargo check -p $GUI --all-targets
 
 # `-j 1` for the test step, and only the test step.
 #
@@ -25,7 +37,7 @@ step "clippy"      cargo clippy --workspace --all-targets -- -D warnings
 #
 # Costs little: clippy --all-targets above has already compiled the graph, so this step
 # is mostly linking, and serialising the links is the point.
-step "test"        cargo test --workspace -j 1
-step "build"       cargo build --workspace
+step "test"        cargo test --workspace --exclude $GUI -j 1
+step "build"       cargo build --workspace --exclude $GUI
 echo; [ $rc -eq 0 ] && echo "verify: PASS" || echo "verify: FAIL"
 exit $rc

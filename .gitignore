@@ -24,3 +24,25 @@ design/evidence/
 
 # Workbench session transcripts — tooling output, not project history.
 .workbench/transcripts/
+
+# Vendored dependencies, and the config that points cargo at them.
+#
+# `cargo vendor` for the eframe tree is **658 MB**, and 329 MB of that is Windows and web
+# crates (`winapi` x2, four `windows-sys` versions, `web-sys`, `wasm-*`) that no macOS or
+# Linux build can reach — cargo vendors everything in the lock across every target, and
+# there is no filter. Git never forgets, so committing it would put 658 MB in every future
+# clone forever.
+#
+# **These two entries must stay together.** A committed `.cargo/config.toml` pointing at a
+# `vendor/` that is not there breaks a fresh clone with a confusing error; ignoring both
+# means cargo simply uses crates.io, which is what every other Rust project does.
+#
+# To regenerate on any machine with network, from the repo root:
+#
+#     mkdir -p .cargo
+#     cargo vendor > .cargo/config.toml
+#
+# The container has no network, so this is the operator's step — and because the tree is a
+# shared bind mount, running it on the host is what makes offline builds work in here.
+vendor/
+.cargo/

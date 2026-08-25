@@ -7,19 +7,16 @@ members = [
     "crates/md2pdf-paths",
     "crates/md2pdf-template",
     "crates/md2pdf-app",
+    # The only member that cannot be built in the container: `eframe` links system GL/X11
+    # libraries this image does not have. It is typechecked here against the vendored
+    # sources and linked on the host. See design/plan-app.md.
+    "crates/md2pdf-gui",
     "crates/md2pdf-engine",
     "crates/md2pdf-cli",
 ]
 # Spikes are throwaway experiments with their own pinned deps. They are not
 # part of the product and must not be built or linted with it.
-# md2pdf-gui is deliberately **not** a member yet.
-#
-# It depends on `eframe`, which is not in the offline registry — and adding an
-# unresolvable dependency breaks *every* cargo command here, not just that crate, because
-# the lock cannot be updated without network access. So it waits outside the workspace
-# until the operator vendors, then moves into `members` in the same commit.
-# See design/plan-app.md.
-exclude = ["spikes", "crates/md2pdf-gui"]
+exclude = ["spikes"]
 
 # Pinned exactly. The typst crate API churns across releases (8 breaking changes
 # observed in ~200 lines going to 0.15.1). Upgrades are a scheduled task with a
