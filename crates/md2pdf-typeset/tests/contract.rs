@@ -14,8 +14,8 @@
 //! guessed.
 
 use md2pdf_domain::{
-    Decision, DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Orientation,
-    Reduction, Template,
+    Decision, DecisionMap, Element, ElementClass, ElementId, Floors, Markup, Orientation, Override,
+    Permit, Reduction, Template,
 };
 use md2pdf_typeset::Typesetter;
 
@@ -318,16 +318,31 @@ fn shipped_fontbook_contains_our_faces() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_stale_override_is_rejected_not_misapplied() {
+fn a_stale_decision_is_rejected_not_misapplied() {
+    // The hole content-hashing closes: the Source was edited, and this id no longer names
+    // the same Element. Splicing a decision in anyway would rotate or shrink whatever now
+    // occupies that position.
+    //
+    // **Rewritten in 3f, not renumbered.** This used to exercise
+    // `DecisionMap::apply_override`, which set the two axes directly — and its other half
+    // asserted that "force portrait" left a shrink alone, a property that only made sense
+    // while an Override *was* a decision. It is now a permission the ProbePass measures
+    // under, so there is no way to name an orientation without a size measured for it,
+    // and that half of the test was asserting the bug was still reachable. See
+    // `design/plan-review.md`.
     let els = vec![wide_table()];
     let mut map = probe(&els);
+    let live = map.get(&els[0].id).cloned().expect("decided");
 
-    // Same position, different content: the Source was edited externally.
-    let edited = ElementId::new(els[0].id.order, "#table(columns: 2, [a], [b])");
+    let edited = Decision {
+        id: ElementId::new(els[0].id.order, "#table(columns: 2, [a], [b])"),
+        orientation: Orientation::Portrait,
+        ..live.clone()
+    };
     assert!(
-        !map.apply_override(&edited, Some(Orientation::Portrait), None),
-        "an Override whose content hash no longer matches must be dropped, not \
-         applied to whatever now occupies that position"
+        !map.replace(edited),
+        "a Decision whose content hash no longer matches must be dropped, not applied \
+         to whatever now occupies that position"
     );
     assert_eq!(
         map.get(&els[0].id).unwrap().orientation,
@@ -335,29 +350,17 @@ fn a_stale_override_is_rejected_not_misapplied() {
         "unchanged"
     );
 
-    // The live id still works — and setting one axis leaves the other alone, which is
-    // the property the two-axis split exists for. "Force portrait" must not silently
-    // discard the shrink the probe chose.
-    let before = map.get(&els[0].id).unwrap().reduction;
-    assert!(map.apply_override(&els[0].id, Some(Orientation::Portrait), None));
-    let after = map.get(&els[0].id).unwrap();
+    // The live id still splices.
+    assert!(map.replace(Decision {
+        orientation: Orientation::Portrait,
+        ..live
+    }));
     assert_eq!(
-        after.orientation,
-        Orientation::Portrait,
-        "orientation not applied"
-    );
-    assert_eq!(
-        after.reduction, before,
-        "reduction was disturbed by an orientation override"
+        map.get(&els[0].id).unwrap().orientation,
+        Orientation::Portrait
     );
 }
 
-/// Emphasis must actually render in an italic face.
-///
-/// This is a **styling** pin, not a text pin. Italic silently did not render — the
-/// vendored variable `SourceSans3.ttf` has a `wght` axis and no `ital`/`slnt`, so
-/// `#emph` fell back to upright. Every text-based test passed throughout, because
-/// `text()` sees characters and not style. Found by looking at a rendered page.
 #[test]
 fn emphasis_renders_in_an_italic_face() {
     let el = Element::new(
@@ -859,4 +862,146 @@ fn every_character_the_corpus_uses_has_a_glyph() {
          See `design/plan-glyphs.md`.",
         described.join("\n")
     );
+}
+
+// ---------------------------------------------------------------------------------
+// 3f — Overrides are permissions the ladder measures under, not decisions.
+// ---------------------------------------------------------------------------------
+
+/// A converted table too wide for the page — with a reflow alternate, so the ladder's
+/// default is to wrap and an Override is a real change rather than a no-op.
+fn reflowing_table() -> Vec<Element> {
+    let md = "| a | b | c | d |\n|---|---|---|---|\n| xxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxx \
+              | xxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxx |";
+    md2pdf_convert::convert(md, &md2pdf_convert::SourceContext::none()).elements
+}
+
+#[test]
+fn forcing_landscape_measures_against_the_landscape_width() {
+    // **The defect this phase started from.** `apply_override` used to set the axis
+    // directly, leaving a size chosen against the *portrait* width on an element now
+    // rendered sideways — the bug the GLOSSARY names and T14 fixed:
+    //
+    //   "RE-MEASURE in landscape; do not inherit the portrait size."
+    //
+    // A permission cannot express that mistake: the ladder runs again and reports the
+    // width it actually measured against.
+    let template = template();
+    let elements = reflowing_table();
+    let ts = Typesetter::new();
+
+    let table = elements
+        .iter()
+        .find(|e| e.class == ElementClass::Table)
+        .expect("a table");
+
+    let (before, _) = ts.probe(&elements, &template).expect("probe");
+    let portrait_width = before.get(&table.id).expect("decided").available_pt;
+
+    let (after, _) = ts
+        .probe_with(
+            &elements,
+            &template,
+            &[Override {
+                id: table.id,
+                permit: Permit::Landscape,
+            }],
+        )
+        .expect("probe");
+    let d = after.get(&table.id).expect("decided");
+
+    assert_eq!(d.orientation, Orientation::Landscape);
+    assert!(
+        d.available_pt > portrait_width,
+        "the landscape decision was measured against {}pt, the portrait width — the size \
+         was inherited rather than re-measured",
+        d.available_pt
+    );
+    assert_eq!(
+        d.available_pt,
+        template.available_landscape_pt(),
+        "measured against something that is neither width"
+    );
+}
+
+#[test]
+fn permitting_below_the_floor_yields_a_size_below_it() {
+    // The other half: a permission is a *bound the user allows*, and the ladder still
+    // stops at the first size that fits. What must not happen is the floor silently
+    // winning anyway.
+    let template = template();
+    let elements = reflowing_table();
+    let ts = Typesetter::new();
+    let table = elements
+        .iter()
+        .find(|e| e.class == ElementClass::Table)
+        .expect("a table");
+
+    let (after, _) = ts
+        .probe_with(
+            &elements,
+            &template,
+            &[Override {
+                id: table.id,
+                permit: Permit::BelowFloor { to_pt: 4.0 },
+            }],
+        )
+        .expect("probe");
+
+    match after.get(&table.id).expect("decided").reduction {
+        Reduction::Shrink { size_pt } => assert!(
+            size_pt < template.floors.table_comfort_pt,
+            "permitting 4pt still returned {size_pt}pt, at or above the comfort floor"
+        ),
+        other => panic!("expected a shrink under a below-floor permit, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_override_for_a_stale_element_changes_nothing() {
+    // The Source was edited and the id no longer names the same content. Misapplying it
+    // would silently rotate or shrink whatever now sits at that position.
+    let template = template();
+    let elements = reflowing_table();
+    let ts = Typesetter::new();
+
+    let (before, _) = ts.probe(&elements, &template).expect("probe");
+    let (after, _) = ts
+        .probe_with(
+            &elements,
+            &template,
+            &[Override {
+                id: ElementId::new(0, "content that is no longer there"),
+                permit: Permit::Landscape,
+            }],
+        )
+        .expect("probe");
+
+    assert_eq!(before, after, "a stale Override was applied anyway");
+}
+
+#[test]
+fn probing_one_element_agrees_with_probing_the_document() {
+    // **D1 in `design/plan-review.md`** — the risk that would pass every other test.
+    //
+    // The recompile loop re-probes to apply an Override. If an Element's decision
+    // depended on the Elements around it, a re-probe would answer differently and every
+    // override would be subtly inconsistent with its page — and rendering one page would
+    // look fine, so nothing else here would catch it.
+    let template = template();
+    let elements = reflowing_table();
+    let ts = Typesetter::new();
+
+    let (whole, _) = ts.probe(&elements, &template).expect("probe");
+    for el in &elements {
+        let (alone, _) = ts
+            .probe(std::slice::from_ref(el), &template)
+            .expect("probe one");
+        assert_eq!(
+            whole.get(&el.id),
+            alone.get(&el.id),
+            "element {} decides differently on its own than in its document",
+            el.id.order
+        );
+    }
 }

@@ -97,28 +97,32 @@ impl DecisionMap {
         self.decisions.iter().find(|d| d.id.matches(id))
     }
 
-    /// Apply a user Override to one or both axes.
+    /// Replace one Element's Decision with a freshly measured one.
     ///
-    /// Each axis is set independently — "force landscape" must not disturb a shrink the
-    /// probe chose, and "permit below-floor" must not undo a rotation. Passing `None`
-    /// for an axis leaves it as decided.
+    /// **This is not how a user Override is applied**, and there used to be a method here
+    /// that made it look as though it were. `apply_override(id, orientation, reduction)`
+    /// set the two axes directly, which let a caller turn an Element landscape while
+    /// keeping a size chosen against the *portrait* width — the exact bug T14 exists to
+    /// prevent, and the GLOSSARY names:
     ///
-    /// Returns false and changes nothing if the Override is stale: the Source was
-    /// edited and this id no longer names the same element.
-    pub fn apply_override(
-        &mut self,
-        id: &ElementId,
-        orientation: Option<Orientation>,
-        reduction: Option<Reduction>,
-    ) -> bool {
-        match self.decisions.iter_mut().find(|d| d.id.matches(id)) {
-            Some(d) => {
-                if let Some(o) = orientation {
-                    d.orientation = o;
-                }
-                if let Some(r) = reduction {
-                    d.reduction = r;
-                }
+    /// > RE-MEASURE in landscape; do not inherit the portrait size.
+    ///
+    /// It had no callers, which is the only reason it never shipped. An [`Override`] is a
+    /// *permission* the ProbePass measures under (`md2pdf_domain::review`), and what
+    /// comes back is a Decision like any other — which is what this splices in.
+    ///
+    /// [`Override`]: crate::review::Override
+    ///
+    /// Returns false and changes nothing if the id is stale: the Source was edited and
+    /// this no longer names the same Element.
+    pub fn replace(&mut self, decision: Decision) -> bool {
+        match self
+            .decisions
+            .iter_mut()
+            .find(|d| d.id.matches(&decision.id))
+        {
+            Some(slot) => {
+                *slot = decision;
                 true
             }
             None => false,

@@ -32,7 +32,7 @@ mod probe;
 mod render;
 mod world;
 
-use md2pdf_domain::{DecisionMap, Diagnostic, Element, Template};
+use md2pdf_domain::{DecisionMap, Diagnostic, Element, Override, Template};
 use typst_layout::PagedDocument;
 
 pub use world::TypstWorld;
@@ -169,8 +169,23 @@ impl Typesetter {
         elements: &[Element],
         template: &Template,
     ) -> Result<(DecisionMap, Diagnostic), TypesetError> {
+        self.probe_with(elements, template, &[])
+    }
+
+    /// The same, measuring under user Overrides.
+    ///
+    /// An Override is a **permission**, and this is where it is honoured: the ladder runs
+    /// again for the permitted Element with its constraints changed, and the size that
+    /// comes back is measured under them. Nothing is inherited from the decision being
+    /// replaced — see `md2pdf_domain::review` for why that distinction is load-bearing.
+    pub fn probe_with(
+        &self,
+        elements: &[Element],
+        template: &Template,
+        overrides: &[Override],
+    ) -> Result<(DecisionMap, Diagnostic), TypesetError> {
         self.world
-            .set_source(probe::probe_source(elements, template));
+            .set_source(probe::probe_source_with(elements, template, overrides));
         let doc = self.compile()?;
         let map = harvest::harvest(&doc, elements)?;
         let diagnostic = Diagnostic::from_decisions(&map);

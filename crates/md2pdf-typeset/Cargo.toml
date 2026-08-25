@@ -14,3 +14,9 @@ typst-kit = { workspace = true }
 comemo = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# Only to build realistic Elements for the Override tests: a table that actually needs
+# a decision has to come from the converter, and hand-writing its Markup would pin this
+# crate to emit.rs's output shape.
+md2pdf-convert = { path = "../md2pdf-convert" }

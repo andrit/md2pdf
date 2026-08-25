@@ -8,8 +8,9 @@ use std::process::ExitCode;
 
 use md2pdf_cli::args::{self, ArgsError, HELP};
 use md2pdf_cli::report::Report;
+use md2pdf_convert::SourceContext;
 use md2pdf_domain::Template;
-use md2pdf_engine::{handle, Command, Deps, Event};
+use md2pdf_engine::{handle, BrokerImages, Command, Deps, Event, Review};
 use md2pdf_paths::{PathBroker, PathKind};
 use md2pdf_template::{roots, TemplateCatalogue};
 use md2pdf_typeset::Typesetter;
@@ -91,6 +92,12 @@ fn main() -> ExitCode {
         template: &template,
     };
 
+    // Reporting, not converting. It writes nothing, so it runs before the Command is
+    // even built — there is no Job here, only a question about documents.
+    if options.attention {
+        return attention(&options, &broker, &typesetter, &template);
+    }
+
     // A directory is a batch; a file is one conversion. Users do not think in commands,
     // and the engine already has both.
     //
@@ -167,4 +174,83 @@ fn report_written(written: &[std::path::PathBuf]) {
 
 fn display(path: &Path) -> String {
     path.to_string_lossy().to_string()
+}
+
+/// Report every judgment call md2pdf would make, and what could be allowed instead.
+///
+/// The engine capability 3f added, given the smallest possible surface: phase 4 is the
+/// real one. A capability nobody can exercise is a capability nobody has seen.
+fn attention(
+    options: &args::Options,
+    broker: &PathBroker,
+    typesetter: &Typesetter,
+    template: &Template,
+) -> ExitCode {
+    let sources = match broker.kind(&options.path) {
+        PathKind::Directory => match broker.walk(&options.path) {
+            Ok(set) => set.sources,
+            Err(e) => {
+                eprintln!("md2pdf: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        PathKind::File => vec![options.path.clone()],
+        PathKind::Missing => {
+            eprintln!("md2pdf: {} does not exist", options.path.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    let (mut clean, mut flagged) = (0usize, 0usize);
+    for source in &sources {
+        let Ok(markdown) = broker.read_to_string(source) else {
+            continue;
+        };
+        let parent = source.parent().unwrap_or(Path::new(".")).to_path_buf();
+        let images = BrokerImages(broker);
+        let context = SourceContext::with_template(&parent, &images, template.clone());
+        let review = match Review::open(&markdown, &context, template.clone(), typesetter) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("md2pdf: {}: {e}", source.display());
+                continue;
+            }
+        };
+
+        let list = review.attention();
+        if list.is_empty() {
+            clean += 1;
+            continue;
+        }
+        flagged += 1;
+        println!("\n{}", source.display());
+        for item in &list.items {
+            println!("  element {:<4} {}", item.id.order, describe(&item.what));
+            for offer in &item.offers {
+                println!("      you could {}", offer.label);
+            }
+        }
+        // Evicting between documents, exactly as the batch does — a long `--attention`
+        // run over a corpus is a batch in every respect that matters to memory (F3).
+        md2pdf_typeset::evict(5);
+    }
+
+    // The sentence the whole design has been aiming at.
+    println!("\n{clean} converted cleanly, {flagged} need your attention.");
+    ExitCode::SUCCESS
+}
+
+/// A Compromise in the user's terms, not the ladder's.
+fn describe(kind: &md2pdf_domain::CompromiseKind) -> String {
+    use md2pdf_domain::CompromiseKind as K;
+    match kind {
+        K::ShrunkToFloor { size_pt } => format!("shrunk to {size_pt}pt to fit"),
+        K::Scaled { factor } => format!("scaled to {:.0}% to fit", factor * 100.0),
+        K::Rotated => "given a landscape page".into(),
+        K::Reflowed => "wrapped its cells instead of shrinking".into(),
+        K::Clipped => "CLIPPED — content was lost".into(),
+        K::ImageMissing => "image not found on disk".into(),
+        K::ImageSkipped => "remote image not fetched".into(),
+        K::UnsupportedConstruct { construct } => construct.clone(),
+    }
 }

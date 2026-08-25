@@ -16,6 +16,7 @@ pub mod event;
 pub mod hash;
 pub mod job;
 pub mod markup;
+pub mod review;
 pub mod template;
 
 pub use collision::{BlanketResolution, Collision, Resolution};
@@ -24,4 +25,5 @@ pub use diagnostic::{Compromise, CompromiseKind, Diagnostic};
 pub use element::{Element, ElementClass, ElementId};
 pub use hash::fnv1a;
 pub use markup::Markup;
+pub use review::{Attention, AttentionList, OfferedFix, Override, Permit};
 pub use template::{Floors, Template};

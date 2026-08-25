@@ -117,8 +117,8 @@ numbering reflects decisions actually made rather than a guess at future shape.
 | 3c2 | Paths + Output — widen to batch, collisions | ✅ code-complete 2026-08-20 (T19–T21); `/phase-audit` not run | `/phase-audit` |
 | 3d | CLI adapter, end to end | ✅ code-complete 2026-08-24 (T25–T31a); `/phase-audit` not run | `/phase-audit` |
 | 3e | Template catalogue + shipped template | ✅ code-complete 2026-08-24 (T32); `/phase-audit` not run | `/phase-audit` |
-| **3f** | **Review — attention gate, overrides** | **◐ next — unplanned** | `/phase-audit` |
-| 4 | egui adapter — **the desktop app itself**, host work | planned | `/phase-audit`, on host |
+| 3f | Review — attention gate, overrides | ✅ code-complete 2026-08-25 (T34); `/phase-audit` not run | `/phase-audit` |
+| **4** | **egui adapter — the desktop app itself**, host work | **◐ next — unplanned** | `/phase-audit`, on host |
 | 5 | Settings & identity | planned | `/phase-audit` |
 | 6 | Packaging & distribution | planned | operator-owned |
 

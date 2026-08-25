@@ -18,6 +18,7 @@ OPTIONS:
         --on-collision <HOW>  skip | rename | overwrite   [default: skip]
         --template <NAME>     which template to render with  [default: github-print]
         --templates <DIR>     an extra directory to look for templates in
+        --attention           list what needed a judgment call; write nothing
         --json                emit line-delimited events on stdout
     -q, --quiet               only the final summary, no per-document lines
     -h, --help                print this help
@@ -39,6 +40,11 @@ COLLISIONS:
     to skip it; `rename` writes alongside as name-1.pdf; `overwrite` replaces
     it, and only because you said so.
 
+ATTENTION:
+    --attention converts nothing. It reports, per document, every place md2pdf
+    made a judgment call — what it did, and what you could allow instead. It is
+    the same list the app will offer to act on.
+
 EXIT CODES:
     0  everything converted (documents needing attention still exit 0)
     1  one or more documents failed
@@ -53,6 +59,8 @@ pub struct Options {
     pub on_collision: BlanketResolution,
     pub json: bool,
     pub quiet: bool,
+    /// Report judgment calls instead of converting. Writes nothing.
+    pub attention: bool,
     /// Which template to render with. Resolved against the catalogue, not here.
     pub template: String,
     /// An extra directory to search first. Mostly for tests and one-off runs.
@@ -78,6 +86,7 @@ pub fn parse(argv: Vec<OsString>) -> Result<Options, ArgsError> {
         return Err(ArgsError::HelpRequested);
     }
 
+    let attention = args.contains("--attention");
     let json = args.contains("--json");
     let quiet = args.contains(["-q", "--quiet"]);
 
@@ -128,6 +137,7 @@ pub fn parse(argv: Vec<OsString>) -> Result<Options, ArgsError> {
         on_collision,
         json,
         quiet,
+        attention,
         template,
         templates,
     })

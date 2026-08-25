@@ -244,7 +244,7 @@ fn tofu(elements: &[Element], deps: &Deps) -> Vec<Compromise> {
 /// The adapter lives here rather than in `md2pdf-paths` because `ImageProbe` is
 /// defined in `md2pdf-convert`, and paths cannot see it. The engine already depends on
 /// both, and wiring ports to adapters is what a composition root is for.
-struct BrokerImages<'a>(&'a PathBroker);
+pub struct BrokerImages<'a>(pub &'a PathBroker);
 
 impl ImageProbe for BrokerImages<'_> {
     fn exists(&self, path: &Path) -> bool {

@@ -381,3 +381,32 @@ fn an_unknown_template_lists_what_was_found() {
     assert!(err.contains("absent") && err.contains("here"), "{err}");
     assert!(!tmp.join("out/notes.pdf").is_file(), "wrote output anyway");
 }
+
+#[test]
+fn attention_reports_judgment_calls_and_writes_nothing() {
+    // 3f exit criterion 1. `--attention` is a question about documents, not a Job — it
+    // must not write, and it must name both what was done and what could be allowed.
+    let tmp = TempDir::new("cli-attention");
+    let source = tmp.write(
+        "wide.md",
+        b"# Report\n\n| a | b | c | d | e |\n|---|---|---|---|---|\n          | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx           | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx |\n",
+    );
+    let out = tmp.join("out");
+
+    let result = md2pdf(&[&source, Path::new("-o"), &out, Path::new("--attention")]);
+
+    assert_eq!(code(&result), 0, "stderr: {}", stderr(&result));
+    let said = stdout(&result);
+    assert!(
+        said.contains("need your attention"),
+        "no summary line: {said}"
+    );
+    assert!(
+        said.contains("you could"),
+        "reported a compromise but offered no fix: {said}"
+    );
+    assert!(
+        !tmp.join("out/wide.pdf").is_file(),
+        "--attention wrote a PDF; it is a report, not a conversion"
+    );
+}

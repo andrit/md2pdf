@@ -917,7 +917,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   >
   > Rendered and looked at: ✅ ❌ 🤔 🔴 all draw, and the test document reports zero compromises.
 
-- `<pending>` **feat(template): discover templates from disk (3e, T32)** — `INV-11` is finally true.
+- `1742fda` **feat(template): discover templates from disk (3e, T32)** — `INV-11` is finally true.
 
   > **`INV-11` said templates are never compiled in. They were.** `templates/github-print/` has been
   > an empty directory since it was created and `Template::default()` was a Rust constructor, so the
@@ -960,3 +960,44 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > so the Windows assertion failed on Linux against correct behaviour; it now checks structure.
   > And `toml`'s error Display is a span diagram whose first line is the *location* — the sentence
   > naming the mistyped key is the last one.
+
+- `<pending>` **feat: the attention gate and Overrides (3f, T34)** — *"3 converted cleanly, 12 need your attention."*
+
+  > **The payoff for treating layout as something that emits.** The ladder has recorded where it made
+  > a judgment call since T13; nothing until now offered to revisit one. `--attention` names what was
+  > done — *"wrapped its cells instead of shrinking"* — and what could be allowed instead, and writes
+  > nothing.
+  >
+  > **It started from a trap already in the tree.** `DecisionMap::apply_override` set the two axes
+  > directly, so a caller could turn an Element landscape while keeping a size measured against the
+  > *portrait* width — the exact bug the GLOSSARY names and T14 fixed. It had no callers, which is the
+  > only reason it never shipped. It is gone.
+  >
+  > **An Override is now a permission, not an outcome.** `Permit::{Landscape, BelowFloor, Clip}`
+  > changes the ladder's *constraints* and the ProbePass measures under them; what comes back is a
+  > Decision like any other. There is no longer a way to name an orientation without a size measured
+  > for it.
+  >
+  > **The latency assumption was wrong by 15x, and the plan's own doubt is what caught it.** D2
+  > assumed under 100ms from T31's 4ms recompile figure. Measured: **1567ms**. Re-probing the document
+  > to move one table re-measures all hundred of them — the ProbePass builds one Typst document for
+  > every Element and `comemo` keys on the source, so changing one Element's constants invalidates the
+  > whole thing. T31's 4ms was recompiling an *unchanged* source, where every measurement is a hit.
+  >
+  > Fixed by re-probing only the Elements whose permissions changed and splicing the results in —
+  > sound only because Element decisions do not depend on each other, which is what D1's test was
+  > written to check **before there was a reason to rely on it**. That is the whole reason the fix took
+  > minutes rather than an afternoon of doubt.
+  >
+  > ```
+  > 100 elements | open 881ms | first use of an option 328ms | thereafter 8ms
+  > ```
+  >
+  > **Two numbers because they are two different clicks**: `comemo` keys on the probe source and each
+  > distinct permit produces a distinct one, so the first time a user tries "landscape" costs ~330ms
+  > and every later use costs 8ms. The test asserts the steady state and *reports* the cold number
+  > rather than averaging it away.
+  >
+  > A contract test that pinned `apply_override` was **rewritten, not renumbered**: half of it
+  > asserted that "force portrait" left a shrink alone, which only made sense while an Override was a
+  > decision — it was asserting the bug was still reachable.
