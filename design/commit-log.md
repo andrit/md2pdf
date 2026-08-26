@@ -21,6 +21,12 @@ T26a and T27 all sat `<pending>` after being committed. Backfilled 2026-08-21. T
 the full subject line, because the task tag alone is ambiguous: "(T27)" named both the commit that
 planned the census and the one that built it.
 
+**The bold subject is compared literally, so it must contain no markdown.** Backticks around a
+`~` in an entry title made it unmatchable and the script said "hashes are current" — the same
+silence, from the other end. Commit subjects are `.strip()`ed since 2026-08-26, which covers a
+stray pasted space; nothing can cover markup that is not in the commit. Write the subject exactly
+as it will be typed into `git commit`.
+
 Deliberately **not** wired into `verify.sh`. A pending entry is *correct* between staging and
 committing, and the gap between your commit and the next staging is normal working state — gating on
 it would turn the build red for bookkeeping at the one moment it is expected.
@@ -1334,7 +1340,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > first element, landscape marker moved outside the block; all three fail, each naming what
   > broke. That habit has now caught one vacuous test and confirmed three real ones this week.
 
-- `<pending>` **fix(app): refuse a destination that is not a full path, and expand `~`** (phase 4, part 10).
+- `c2c23bf` **fix(app): refuse a destination that is not a full path, and expand ~** (phase 4, part 10).
 
   > **A silent wrong write, found by reading the code rather than by losing a PDF.** The typed
   > destination went straight to `PathBuf::from(trimmed)`. Two ways that ends badly, and neither
@@ -1367,3 +1373,34 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `Env` moved onto `App` (`roots::Env::current()`, read once in `Gui::new`) so expansion is a
   > pure function of a value — the pattern `roots` already established for exactly this reason,
   > and what lets a container whose `HOME` is `/home/user` test the macOS case.
+
+- `<pending>` **fix(app): end the Job when the Job ends, not when a batch reports** (phase 4, part 11).
+
+  > **The operator, with the PDF already open in front of them: "the section in md2pdf still is
+  > spinning and says: Converting…".** It was.
+  >
+  > `App.running` was cleared only by `Event::BatchCompleted` — and **[measured]** `job.rs:186`
+  > emits that from `convert_batch` alone. `Command::ConvertSource` ends after `report(...)` with
+  > no completion event of any kind, so converting a single file left the spinner turning over a
+  > finished file, permanently.
+  >
+  > **Nobody noticed because the CLI cannot have this bug.** `handle` is synchronous: for a
+  > caller that blocks on it, the Job ending *is* the call returning, and no event is needed. The
+  > gap only exists for a caller that watches a stream — and the GUI is the first one.
+  >
+  > So `Update::Finished` is sent by the worker **after `handle` returns**, which is the one fact
+  > true for both Commands and every outcome, and it needs no contract change. `BatchCompleted`
+  > goes back to being what it is — a *summary* of what a batch did — and no longer decides
+  > anything. **One thing ends the run**, for the same reason one event now decides Flagged: the
+  > previous version had the answer split across a summary event and an outcome nobody sent.
+  >
+  > The test asserts **both** Commands in one loop. The batch case always passed, and its passing
+  > is exactly what hid the single-file case — a test that covers the working half and calls the
+  > feature tested. Mutation-checked: with `Finished` suppressed it fails.
+  >
+  > **Also corrected, one line, in this file's own convention:** an entry's bold subject is
+  > compared literally, so backticks around a `~` in part 10's title made it unmatchable and
+  > `commit-log.sh` reported "hashes are current". Second silent-drift bug in this gate in two
+  > days, from the opposite end to the first: a stray *space in the commit* then, stray *markup in
+  > the entry* now. Subjects were already `.strip()`ed; nothing can strip markup that was never in
+  > the commit, so the rule is now written down instead.

@@ -82,6 +82,14 @@ pub enum Update {
     Page(Box<Page>),
     /// Something went wrong for one request. Not fatal to the session.
     Failed(String),
+    /// A Job is over — **however it ended, and whatever it was**.
+    ///
+    /// Sent when `md2pdf_engine::handle` returns, which is the only signal that is true
+    /// for both Commands. `BatchCompleted` is emitted by `convert_batch` alone, so a
+    /// single-file conversion produced no completion event at all and the window span
+    /// "Converting…" forever over a PDF that was already on disk. A synchronous caller
+    /// like the CLI never noticed: for it, the Job ending *is* the call returning.
+    Finished,
 }
 
 /// A handle to the compiling thread.
@@ -153,6 +161,9 @@ fn run(requests: Receiver<Request>, updates: Sender<Update>) {
                 md2pdf_engine::handle(command, &deps, &mut |event| {
                     let _ = updates.send(Update::Engine(Box::new(event)));
                 });
+                // **After the stream, always.** `handle` returning is the one fact that
+                // means "the Job is over" for every Command and every outcome.
+                let _ = updates.send(Update::Finished);
             }
 
             Request::Open { source, template } => {

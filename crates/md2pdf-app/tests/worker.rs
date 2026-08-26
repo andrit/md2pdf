@@ -62,6 +62,48 @@ fn a_job_runs_on_the_worker_and_streams_events_back() {
     assert!(tmp.join("out/notes.pdf").is_file(), "no PDF was written");
 }
 
+#[test]
+fn converting_one_file_stops_saying_converting() {
+    // The defect: `BatchCompleted` is emitted by `convert_batch` alone, so a single
+    // Source finished the Job with no completion event and the window span "Converting…"
+    // forever over a PDF that was already on disk. Asserted for **both** Commands,
+    // because the batch case worked and its passing is what hid the other one.
+    for (name, batch) in [("one", false), ("many", true)] {
+        let tmp = TempDir::new(&format!("app-finish-{name}"));
+        let source = tmp.write("notes.md", b"# Title\n\nSome prose.\n");
+        let worker = Worker::spawn();
+        let mut app = App::default();
+
+        let command = if batch {
+            Command::ConvertBatch {
+                source_root: source.parent().expect("parent").to_path_buf(),
+                destination: tmp.join("out"),
+                on_collision: md2pdf_domain::BlanketResolution::OverwriteAll,
+            }
+        } else {
+            Command::ConvertSource {
+                source: source.clone(),
+                destination: tmp.join("out"),
+            }
+        };
+
+        let request = app.run_request(command);
+        app.sent(&request);
+        assert!(app.running, "the spinner never started");
+        worker.send(request);
+
+        for update in collect(&worker, |all| {
+            all.iter().any(|u| matches!(u, Update::Finished))
+        }) {
+            app.absorb(update);
+        }
+        assert!(
+            !app.running,
+            "{name}: still 'Converting…' after the Job ended"
+        );
+    }
+}
+
 /// The wide table that will not fit on A4. Reused: it is the cheapest thing that makes
 /// the engine visibly concede.
 const WIDE_TABLE: &[u8] = b"# Report\n\n| a | b | c | d | e |\n|---|---|---|---|---|\n\

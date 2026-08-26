@@ -289,6 +289,10 @@ impl App {
                 self.problem = Some(message);
                 self.opening = false;
             }
+            // **The one thing that stops "Converting…".** Not `BatchCompleted`, which
+            // only a batch emits — a single Source ended the Job with no event at all
+            // and left the spinner running over a finished PDF.
+            Update::Finished => self.running = false,
         }
     }
 
@@ -329,11 +333,11 @@ impl App {
                 self.sources
                     .insert(source, SourceState::Skipped(format!("{reason:?}")));
             }
-            Event::BatchCompleted { .. } => self.running = false,
-            Event::Failed { message } => {
-                self.problem = Some(message);
-                self.running = false;
-            }
+            // `BatchCompleted` is a *summary*, not a completion signal — it says what a
+            // batch did, and only a batch sends it. What ends the run is `Update::Finished`,
+            // so exactly one thing decides, for every Command.
+            Event::BatchCompleted { .. } => {}
+            Event::Failed { message } => self.problem = Some(message),
             _ => {}
         }
     }
