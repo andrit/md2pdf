@@ -1202,7 +1202,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > three rewritten unit tests had encoded the old behaviour as correct; the third passed either
   > way and changed only to use the new helper.
 
-- `<pending>` **feat(app): md2pdf.app — a double-clickable bundle, icon and all** (phase 4, part 7).
+- `aaa00b6` **feat(app): md2pdf.app — a double-clickable bundle, icon and all** (phase 4, part 7).
 
   > **Asked for, not planned: "can we create that desktop icon so I can use that to open the app?"**
   > `roadmap.md` §6 has packaging as operator-owned and mostly-not-engineering, and it stays that
@@ -1240,3 +1240,33 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > "hashes are current" — its entry would have sat `<pending>` forever. The gate that exists to
   > catch silent drift went silent, over an invisible character. Subjects are now `.strip()`ed
   > before matching, and the hash it then found is filled in above.
+
+- `<pending>` **fix(gui): bound the panels, so one file path cannot eat the window** (phase 4, part 8).
+
+  > **The first real use of the app found it in one gesture.** A markdown file dropped from
+  > `~/Documents/RitterEnterprises/AIDevWorkBench/knowledgebase/mechInterpret-cattheory/` left the
+  > controls panel occupying four fifths of the window, the preview a thumbnail, the attention
+  > offers broken one word per line — and the panel could not be dragged back.
+  > (`design/screenshots/`, 2026-08-25 23.36, untracked per the rule for design rasters.)
+  >
+  > **Caused by the drop-acknowledgement two commits earlier**, which drew `path.display()` in a
+  > `ui.horizontal` — a layout that does not wrap. **[measured]** from `vendor/egui`'s `panel.rs`,
+  > not from guesswork about egui: a `SidePanel`'s final rect is the one its *content* returned
+  > (`inner_response.response.rect`), and `PanelState { rect }` persists it, so the next frame
+  > starts from the inflated width and the label inflates it again. The drag was fighting a loop,
+  > not a stuck widget.
+  >
+  > Two changes, and it is worth being clear which one fixes what. `width_range` on both panels is
+  > the actual fix: `width = clamp_to_range(width, width_range)` runs *before* content is laid
+  > out, so a bounded range breaks the feedback loop whatever the content does. `Label::truncate()`
+  > on the filename is what makes the bounded panel look intentional rather than clipped — the
+  > full path moved to a hover.
+  >
+  > **`default_width` is not a bound**, which is the lesson worth keeping: it is where the panel
+  > starts, and every panel in this app was given only that. A control panel is a fixed-purpose
+  > strip and belongs in a range.
+  >
+  > **Unverifiable in the container, by construction.** `md2pdf-gui` cannot be linked here, so
+  > this is `cargo check` plus reading the vendored widget source, and the operator's next launch
+  > is the test. That is the standing cost of the one crate the gate cannot run — recorded again
+  > because it has now produced two defects in a row that only a human at the window could see.

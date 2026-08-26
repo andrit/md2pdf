@@ -36,9 +36,19 @@ pub fn source_list(ui: &mut egui::Ui, app: &App, hovering: usize) -> Option<Requ
 
     match &app.chosen.path {
         Some(path) => {
+            // **The name, truncated — never the whole path.** A `SidePanel` takes its
+            // width from its content (`panel.rs`: the returned rect is the frame's, and
+            // `PanelState` persists it), so one unwrappable label of an absolute path
+            // inflates the panel every frame and no drag can shrink it again. A dropped
+            // file from a deep directory ate the window. The path is still one hover away.
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.display().to_string());
             ui.horizontal(|ui| {
                 ui.strong(if path.is_dir() { "folder:" } else { "file:" });
-                ui.label(path.display().to_string());
+                ui.add(egui::Label::new(name).truncate())
+                    .on_hover_text(path.display().to_string());
             });
         }
         None => {

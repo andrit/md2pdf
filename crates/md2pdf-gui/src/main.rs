@@ -185,9 +185,16 @@ impl eframe::App for Gui {
 
         let mut intent: Option<Request> = None;
 
+        // **Bounded, not just given a default.** `default_width` is the *starting* width
+        // and content can push past it; `width_range` is what the drag and the persisted
+        // `PanelState` are clamped to. Without a maximum, one long label is enough to
+        // give a control panel four fifths of the window and no way back — which is
+        // exactly what a deep file path did. The minimum keeps the Convert button and
+        // the collision choices on one line.
         egui::SidePanel::left("controls")
             .resizable(true)
-            .default_width(340.0)
+            .default_width(360.0)
+            .width_range(300.0..=620.0)
             .show(ctx, |ui| {
                 if let Some(r) = widgets::source_list(ui, &self.app, self.hovering) {
                     intent = Some(r);
@@ -202,9 +209,14 @@ impl eframe::App for Gui {
                 widgets::batch_progress(ui, &self.app);
             });
 
+        // Bounded for the same reason, and with a minimum wide enough that the offer
+        // buttons read as sentences rather than one word per line — the screenshot that
+        // reported the panel bug also showed "give it a landscape page instead of
+        // wrapping" broken across five lines, because the left panel had squeezed it.
         egui::SidePanel::right("attention")
             .resizable(true)
             .default_width(320.0)
+            .width_range(260.0..=520.0)
             .show(ctx, |ui| {
                 if let Some(r) = widgets::attention_list(ui, &self.app) {
                     intent = Some(r);
