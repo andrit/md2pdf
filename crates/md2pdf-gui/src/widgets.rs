@@ -137,6 +137,20 @@ pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) 
     ui.horizontal(|ui| {
         ui.label("Save to:");
         ui.text_edit_singleline(destination);
+        // **A button beside the field, not a panel on click-into-the-field.** Opening a
+        // modal when a text box takes focus would fight anyone trying to type, and typing
+        // still has to work — it is the only way in on a platform with no panel. Left out
+        // entirely where there is nothing to open, rather than drawn dead.
+        if md2pdf_mac::can_choose() && ui.button("Choose…").clicked() {
+            // Start where they already are, so the panel opens somewhere meaningful
+            // rather than at the default.
+            if let Some(picked) = md2pdf_mac::choose_folder(app.chosen.destination.as_deref()) {
+                // Written back into the field, not just into `chosen`: the field is the
+                // record of what was asked for, and the two disagreeing is the bug the
+                // dropped-folder path already had to fix.
+                *destination = picked.display().to_string();
+            }
+        }
     });
     // Re-read every frame rather than on `changed()`: a rejection has to stay on screen
     // for as long as the text that caused it does, and `changed()` fires once.

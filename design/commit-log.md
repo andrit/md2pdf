@@ -1374,7 +1374,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > pure function of a value — the pattern `roots` already established for exactly this reason,
   > and what lets a container whose `HOME` is `/home/user` test the macOS case.
 
-- `<pending>` **fix(app): end the Job when the Job ends, not when a batch reports** (phase 4, part 11).
+- `1ab3d32` **fix(app): end the Job when the Job ends, not when a batch reports** (phase 4, part 11).
 
   > **The operator, with the PDF already open in front of them: "the section in md2pdf still is
   > spinning and says: Converting…".** It was.
@@ -1404,3 +1404,55 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > days, from the opposite end to the first: a stray *space in the commit* then, stray *markup in
   > the entry* now. Subjects were already `.strip()`ed; nothing can strip markup that was never in
   > the commit, so the rule is now written down instead.
+
+- `<pending>` **feat(gui): a Choose… button, and a Finder panel that the gate can typecheck** (phase 4, part 12).
+
+  > **The refusal was re-priced and it had gone stale.** Part 3 declined a file dialog because
+  > `rfd` would cost a vendoring round, and that was true. What nobody checked is that
+  > **`objc2-app-kit` has been in `vendor/` the whole time** — eframe pulls it through winit — with
+  > `NSOpenPanel`, `canChooseDirectories`, `setDirectoryURL`, `runModal` and `URLs` all present at
+  > 0.3.2. `rfd` is a wrapper over exactly these calls. The panel costs **no new package**: only
+  > features switched on over source already on disk, and `Cargo.lock` gains no entry.
+  >
+  > The lesson is about the shape of the earlier decision, not its answer. *"That would need a
+  > dependency"* was recorded as a cost and never re-checked against a tree that kept growing
+  > underneath it.
+  >
+  > ## The part worth the effort: it is checked
+  >
+  > **[measured]** `cargo check --target aarch64-apple-darwin -p md2pdf-gui` **cannot work** here:
+  > typst pulls `psm`, whose build script assembles with `-arch arm64`, and the container's `cc`
+  > rejects the flag. It dies before reaching any of our code. But the same command against a
+  > crate whose graph is only `objc2` and two generated binding crates — none of which compile any
+  > C — **works on Linux**, because `check` does not link and needs no macOS SDK.
+  >
+  > So the panel is its own crate, `md2pdf-mac`, for one reason: to be checkable. That is the
+  > `md2pdf-app` argument applied to the last unverifiable surface — make the part nothing can
+  > check as small as possible, then find a way to check it anyway. `verify.sh` gains a
+  > **`mac-check`** step (clippy, `-D warnings`) and `rust-toolchain.toml` pins the target, which
+  > is free on the host because it *is* that target.
+  >
+  > **It earned itself within a minute.** The first cross-check failed on two real errors —
+  > `runModal` and `NSModalResponseOK` are both gated behind the `NSApplication` feature, which no
+  > amount of reading `NSOpenPanel.rs` had suggested — and then on four unnecessary `unsafe`
+  > blocks written from a memory of an older objc2. Every one of those would otherwise have been
+  > found by the operator, on the Mac, after a full release build.
+  >
+  > **What is still not verified, and must be said plainly:** that the panel *behaves*.
+  > Typechecking proves the selectors exist with the shapes we call them with. It cannot prove one
+  > appears on screen or can be dismissed. That still needs the Mac — but the failure modes left
+  > are behavioural, not "this method does not exist", which is the class that has cost the most
+  > round-trips this week.
+  >
+  > ## The interaction
+  >
+  > **A button beside the field, not a panel when the field takes focus.** Clicking into a text
+  > box and having a modal appear would fight anyone trying to type — and typing has to keep
+  > working, because it is the only way in on a platform with no panel. The button is omitted
+  > entirely where `can_choose()` is false rather than drawn dead.
+  >
+  > The panel opens at the current destination, creates directories (the one thing the text field
+  > cannot offer), chooses folders and not files, and writes its answer **back into the field** —
+  > the field being the record of what was asked for, and the two disagreeing being the bug the
+  > dropped-folder path already had to fix once. Off the main thread it returns `None` rather than
+  > panicking: AppKit is main-thread-only, and a file dialog is not worth ending the process over.

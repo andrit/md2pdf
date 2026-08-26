@@ -1,0 +1,31 @@
+[package]
+name = "md2pdf-mac"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# **Only on macOS, and only what NSOpenPanel needs.** Every one of these is already in
+# `Cargo.lock` and already vendored — `eframe` pulls the same versions through `winit`, so
+# this adds no package to the tree and needs no vendoring round. Enabling a feature
+# compiles more of a crate that is already on disk.
+#
+# The feature list is exactly what `NSOpenPanel`'s own `#[cfg]` demands: it inherits from
+# NSSavePanel → NSPanel → NSWindow → NSResponder, and `NSModalResponseOK` lives in the
+# NSWindow module.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    # `runModal` and `NSModalResponseOK` are both behind this one — an application-modal
+    # panel is, reasonably, an NSApplication concept.
+    "NSApplication",
+    "NSOpenPanel",
+    "NSPanel",
+    "NSResponder",
+    "NSSavePanel",
+    "NSWindow",
+] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "NSArray",
+    "NSString",
+    "NSURL",
+] }

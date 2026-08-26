@@ -3,3 +3,7 @@
 [toolchain]
 channel = "1.97.1"
 components = ["rustfmt", "clippy"]
+# **The macOS std, for typechecking only.** `verify.sh` checks `md2pdf-mac` against this
+# target so the AppKit bindings are not the one part of the tree nothing verifies. Free on
+# the host — it *is* this target; a one-time rustup download in the Linux container.
+targets = ["aarch64-apple-darwin"]

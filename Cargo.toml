@@ -11,6 +11,10 @@ members = [
     # libraries this image does not have. It is typechecked here against the vendored
     # sources and linked on the host. See design/plan-app.md.
     "crates/md2pdf-gui",
+    # macOS-only at runtime, but a workspace member everywhere: it is checked for
+    # aarch64-apple-darwin from the container, which is the whole reason it is a
+    # separate crate. See its lib.rs.
+    "crates/md2pdf-mac",
     "crates/md2pdf-engine",
     "crates/md2pdf-cli",
 ]

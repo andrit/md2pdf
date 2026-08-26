@@ -2643,8 +2643,18 @@ dependencies = [
  "md2pdf-app",
  "md2pdf-domain",
  "md2pdf-engine",
+ "md2pdf-mac",
  "md2pdf-paths",
  "md2pdf-template",
+]
+
+[[package]]
+name = "md2pdf-mac"
+version = "0.1.0"
+dependencies = [
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
 ]
 
 [[package]]

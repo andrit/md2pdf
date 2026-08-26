@@ -51,5 +51,8 @@ egui = "0.29"
 md2pdf-app = { path = "../md2pdf-app" }
 md2pdf-domain = { path = "../md2pdf-domain" }
 md2pdf-engine = { path = "../md2pdf-engine" }
+# The Finder panel. Its own crate so the gate can typecheck it for macOS from the
+# container — see its lib.rs. On Linux it is a stub that chooses nothing.
+md2pdf-mac = { path = "../md2pdf-mac" }
 md2pdf-paths = { path = "../md2pdf-paths" }
 md2pdf-template = { path = "../md2pdf-template" }

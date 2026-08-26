@@ -27,6 +27,20 @@ GUI=md2pdf-gui
 step "clippy"      cargo clippy --workspace --exclude $GUI --all-targets -- -D warnings
 step "gui-check"   cargo check -p $GUI --all-targets
 
+# **The AppKit bindings, typechecked from Linux.** `md2pdf-mac` is `#[cfg]`-ed out of
+# every step above, so on this host the steps above see a stub that chooses nothing — the
+# real `NSOpenPanel` code would be the one part of the tree that nothing verifies.
+#
+# It cross-checks and `md2pdf-gui` does not, and the difference is entirely dependencies:
+# typst pulls `psm`, whose build script compiles assembly with a macOS C toolchain this
+# image has no cross-compiler for. `md2pdf-mac` reaches only `objc2` and two generated
+# binding crates, none of which compile any C — which is the whole reason it is a
+# separate crate. `check` does not link, so no macOS SDK is needed.
+#
+# Needs `aarch64-apple-darwin`, pinned in `rust-toolchain.toml`. On the host that is the
+# native target and costs nothing.
+step "mac-check"   cargo clippy --target aarch64-apple-darwin -p md2pdf-mac -- -D warnings
+
 # `-j 1` for the test step, and only the test step.
 #
 # Each test binary that links typst statically pulls in ~250 crates, and linking two of
