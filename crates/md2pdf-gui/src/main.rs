@@ -9,7 +9,7 @@
 
 mod widgets;
 
-use md2pdf_app::state::App;
+use md2pdf_app::state::{Accepted, App};
 use md2pdf_app::worker::{Request, Update};
 use md2pdf_app::Worker;
 use md2pdf_paths::PathBroker;
@@ -43,6 +43,12 @@ struct Gui {
     /// The page on screen. Rebuilt whenever a new one arrives, dropped when the decision
     /// it was rendered under changes.
     texture: Option<egui::TextureHandle>,
+    /// The destination field's buffer. Owned here because an egui text field edits the
+    /// String it is handed, and a temporary rebuilt each frame loses the caret.
+    destination: String,
+    /// How many files are being dragged over the window right now, so the drop can be
+    /// acknowledged before it lands.
+    hovering: usize,
 }
 
 impl Gui {
@@ -63,26 +69,58 @@ impl Gui {
             },
             worker: Worker::spawn(),
             texture: None,
+            destination: String::new(),
+            hovering: 0,
         }
     }
 
     /// Files dropped on the window. The only way to choose a Source — there is no file
     /// dialog, because that needs a dependency and this is a window with two jobs.
     fn absorb_drops(&mut self, ctx: &egui::Context) {
-        let dropped: Vec<std::path::PathBuf> = ctx.input(|i| {
-            i.raw
-                .dropped_files
-                .iter()
-                .filter_map(|f| f.path.clone())
-                .collect()
+        let (dropped, hovering) = ctx.input(|i| {
+            (
+                i.raw
+                    .dropped_files
+                    .iter()
+                    .filter_map(|f| f.path.clone())
+                    .collect::<Vec<_>>(),
+                i.raw.hovered_files.len(),
+            )
         });
+        // Repaint while something is being dragged over the window. egui draws lazily,
+        // and without this the acknowledgement could fail to appear for the same reason
+        // the drop looked like it did nothing.
+        if hovering > 0 {
+            ctx.request_repaint();
+        }
+        self.hovering = hovering;
         for path in dropped {
-            // A folder dropped second is a destination; the first thing dropped is what
-            // to convert. Crude, and it means one gesture does the common case.
-            if self.app.chosen.path.is_none() {
-                self.app.chosen.path = Some(path);
-            } else if path.is_dir() {
-                self.app.chosen.destination = Some(path);
+            // Where the path goes is `Chosen::accept`'s decision, tested in `md2pdf-app`.
+            // What is left here is the two things that need a window.
+            let is_dir = path.is_dir();
+            match self.app.chosen.accept(path, is_dir) {
+                // Open it straight away. Without this the preview panel is unreachable
+                // until a Job has run — which is what made a good drop look like nothing
+                // happening at all.
+                Accepted::Source { previewable: true } => {
+                    if let Some(source) = self.app.chosen.path.clone() {
+                        let request = self.app.open_request(&source);
+                        self.app.sent(&request);
+                        self.worker.send(request);
+                    }
+                }
+                Accepted::Source { previewable: false } => {}
+                // Re-sync the text field's buffer: it is the edited String, so setting
+                // the PathBuf alone would leave the box showing the old text.
+                Accepted::Destination => {
+                    self.destination = self
+                        .app
+                        .chosen
+                        .destination
+                        .as_ref()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or_default();
+                }
             }
         }
     }
@@ -151,13 +189,13 @@ impl eframe::App for Gui {
             .resizable(true)
             .default_width(340.0)
             .show(ctx, |ui| {
-                if let Some(r) = widgets::source_list(ui, &self.app) {
+                if let Some(r) = widgets::source_list(ui, &self.app, self.hovering) {
                     intent = Some(r);
                 }
                 ui.separator();
                 widgets::template_catalogue(ui, &mut self.app);
                 ui.separator();
-                if let Some(r) = widgets::job_settings(ui, &mut self.app) {
+                if let Some(r) = widgets::job_settings(ui, &mut self.app, &mut self.destination) {
                     intent = Some(r);
                 }
                 ui.separator();
@@ -178,9 +216,7 @@ impl eframe::App for Gui {
         });
 
         if let Some(request) = intent {
-            if matches!(request, Request::Run(_)) {
-                self.app.running = true;
-            }
+            self.app.sent(&request);
             self.worker.send(request);
         }
     }

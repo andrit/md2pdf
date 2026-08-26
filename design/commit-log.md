@@ -1064,7 +1064,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > guessed staleness — are the same error, a belief crossing into an instruction without being
   > checked or labelled unverifiable.
 
-- `<pending>` **feat(gui): md2pdf as a window (phase 4, part 3)**.
+- `2a18a97` **feat(gui): md2pdf as a window (phase 4, part 3)**.
 
   > **The whole app in ~380 lines, because everything it decides was decided elsewhere.**
   > `md2pdf-gui` owns an `App`, a `Worker` and one texture; `md2pdf-app` owns the state machine,
@@ -1098,3 +1098,46 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > in the lock including optional ones, so `wgpu`, `naga` and 277 MB of Windows crates behind
   > `accesskit_windows` are on disk. **[measured]** what matters is unchanged: `cargo tree -e normal`
   > shows zero `wgpu`/`naga` in the enabled tree, so none of it compiles and none of it ships.
+
+- `<pending>` **fix(gui): acknowledge the drop, and draw the icon with the app** (phase 4, part 4).
+
+  > **The first run on the Mac found the defect the container cannot: "dragging an md file on the
+  > window, nothing appears to happen."** It was not a drag-and-drop bug. `absorb_drops` accepted
+  > the file and set `chosen.path` correctly — and then nothing on screen changed, because
+  > `source_list()` drew `app.sources`, which stays empty until a Job has run, and the panel went on
+  > saying *"Drop a markdown file or a folder onto this window."* **A UI that accepts input without
+  > acknowledging it is indistinguishable from one that is broken**, and part 3's own note that
+  > three things were "handled that `cargo check` cannot see" turned out to be the wrong three.
+  >
+  > **Fixed at four points along the gesture**, so there is no moment where the window looks inert:
+  > the hovered-file count draws *"release to add N file(s)"* before the drop lands (with a
+  > `request_repaint()`, because a drag over an idle window generates no other input and egui draws
+  > lazily); the chosen path is drawn whether or not anything has been converted; a dropped *file*
+  > is opened for review immediately; and the preview shows a spinner for the ~900ms that takes.
+  >
+  > **The preview panel was unreachable before this.** `open_request()` was only called from the
+  > sources list — the same list that is empty until a Job runs. So the dead preview and the
+  > silent drop were one gap, not two, and the same fix closes both.
+  >
+  > **The routing moved to `md2pdf-app` as `Chosen::accept`**, with `is_dir` passed in as data
+  > rather than read off the disk, so the rule is four unit tests instead of a comment in the file
+  > nobody can test: a file is always the Source (a second one replaces the first rather than being
+  > silently ignored), a folder is the Source when none is chosen and the destination after.
+  > `App::sent()` is its mirror for `absorb()` — what the window must show *while* the engine is
+  > busy now starts in the same crate as everything else it decides, and `main.rs` lost its last
+  > `matches!` about a request.
+  >
+  > **Two smaller corrections in the same pass.** The destination field is backed by an owned
+  > `String` rather than a temporary rebuilt each frame — an egui text field edits the buffer it is
+  > handed, so the old version lost the caret on every keystroke. And `Update::Failed` now clears
+  > `opening`: reporting a failure while the spinner keeps turning is the same lie in the other
+  > direction.
+  >
+  > **The icon is drawn by md2pdf.** A 256pt square page, the wordmark set in the same Source Sans 3
+  > the documents use, rastered at 4x — so the app's icon is literally a page it rendered, and the
+  > alternative was a drawing dependency for one 1024×1024 square. Two things the generator taught,
+  > both now in its doc comment: `#set page(fill:)` is refused inside the ProbePass's containers (a
+  > filled `#rect` sized to the page does the job), and `ICON_OUT` must be **absolute** — `cargo
+  > test` runs with the crate as its working directory, so a relative path writes into
+  > `crates/md2pdf-engine/assets/` quietly and looks like it worked. It is `#[ignore]`d asset
+  > generation, so `verify.sh` never runs it.

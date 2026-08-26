@@ -16,13 +16,40 @@ use md2pdf_app::worker::Request;
 use md2pdf_domain::Override;
 
 /// The chosen Sources and what happened to each.
-pub fn source_list(ui: &mut egui::Ui, app: &App) -> Option<Request> {
+///
+/// **Draws what has been chosen, not only what has been converted.** The first version
+/// showed `app.sources`, which stays empty until a Job runs — so dropping a file set the
+/// state and the window went on saying "drop a file", and the operator reported the drop
+/// as doing nothing. It was working; nothing rendered it. A UI that accepts input without
+/// acknowledging it is indistinguishable from one that is broken.
+pub fn source_list(ui: &mut egui::Ui, app: &App, hovering: usize) -> Option<Request> {
     let mut intent = None;
     ui.heading("Documents");
+
+    // Acknowledge the *attempt*, before the drop even lands.
+    if hovering > 0 {
+        ui.colored_label(
+            ui.visuals().selection.stroke.color,
+            format!("release to add {hovering} file(s)"),
+        );
+    }
+
+    match &app.chosen.path {
+        Some(path) => {
+            ui.horizontal(|ui| {
+                ui.strong(if path.is_dir() { "folder:" } else { "file:" });
+                ui.label(path.display().to_string());
+            });
+        }
+        None => {
+            ui.label("Drop a markdown file or a folder onto this window.");
+        }
+    }
+
     if app.sources.is_empty() {
-        ui.label("Drop a markdown file or a folder onto this window.");
         return None;
     }
+    ui.separator();
     egui::ScrollArea::vertical()
         .id_salt("sources")
         .max_height(220.0)
@@ -91,19 +118,22 @@ pub fn template_catalogue(ui: &mut egui::Ui, app: &mut App) {
 ///
 /// The collision answer is asked **before** the run, because the engine resolves every
 /// collision up front and never asks mid-Job — `plan-app.md` D6.
-pub fn job_settings(ui: &mut egui::Ui, app: &mut App) -> Option<Request> {
+pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) -> Option<Request> {
     use md2pdf_domain::BlanketResolution as R;
     ui.heading("Output");
 
-    let shown = app
-        .chosen
-        .destination
-        .as_ref()
-        .map(|d| d.display().to_string())
-        .unwrap_or_else(|| "drop a folder, or type a path".into());
-    let mut typed = shown.clone();
-    if ui.text_edit_singleline(&mut typed).changed() && !typed.trim().is_empty() {
-        app.chosen.destination = Some(typed.trim().into());
+    // Backed by a real String rather than rebuilt from the PathBuf each frame: an
+    // egui text field edits the buffer it is given, and handing it a fresh temporary
+    // every frame loses the caret and fights the typist.
+    ui.horizontal(|ui| {
+        ui.label("Save to:");
+        if ui.text_edit_singleline(destination).changed() {
+            let trimmed = destination.trim();
+            app.chosen.destination = (!trimmed.is_empty()).then(|| trimmed.into());
+        }
+    });
+    if app.chosen.destination.is_none() {
+        ui.small("drop a folder onto the window, or type a path");
     }
 
     ui.horizontal(|ui| {
@@ -204,7 +234,10 @@ pub fn preview(ui: &mut egui::Ui, app: &App, texture: Option<&egui::TextureHandl
                 );
             });
         }
-        None if app.open.is_some() => {
+        // `opening` as well as `open`: the gap between asking for a document and its
+        // first page is ~900ms, and the panel must not spend it claiming nothing was
+        // chosen.
+        None if app.open.is_some() || app.opening => {
             ui.spinner();
         }
         None => {

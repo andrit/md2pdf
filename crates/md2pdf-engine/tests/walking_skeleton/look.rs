@@ -138,4 +138,67 @@ mod tests {
             .expect("write");
         println!("wrote {out} ({w}x{h}, page {page} of {})", c.page_count());
     }
+
+    /// Draw the application icon, with the application.
+    ///
+    /// md2pdf already turns text into pixels — using anything else to make its icon would
+    /// mean a drawing dependency for one 1024x1024 square. The wordmark is set in the same
+    /// Source Sans 3 the documents are, so the icon is literally a page md2pdf rendered.
+    ///
+    /// **`ICON_OUT` must be absolute.** `cargo test` runs with the working directory set
+    /// to the *crate* root, so a relative path writes into `crates/md2pdf-engine/` rather
+    /// than the repository's `assets/` — quietly, and it looks like it worked.
+    ///
+    /// ```text
+    /// ICON_OUT=$PWD/assets/icon/md2pdf-1024.png cargo test -p md2pdf-engine \
+    ///     --test walking_skeleton draw_the_icon -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "asset generation, run deliberately"]
+    fn draw_the_icon() {
+        use md2pdf_domain::{Element, ElementClass, Markup};
+
+        let out = std::env::var("ICON_OUT").expect("ICON_OUT");
+        let broker = md2pdf_paths::PathBroker::new();
+
+        // A square page, and the raster scale that turns 256pt into 1024px.
+        let template = Template {
+            page_width_pt: 256.0,
+            page_height_pt: 256.0,
+            margin_pt: 0.0,
+            ..Template::default()
+        };
+
+        // Set directly rather than converted from markdown: this is a wordmark, not a
+        // document, and markdown has no way to say "two lines, centred, very large".
+        // `r##"..."##`: the wordmark contains `"#` inside `rgb("#1b1b1f")`, which would
+        // close a `r#"..."#` string early.
+        // A filled rect rather than `#set page(fill:)`: the ProbePass wraps every element
+        // in a container, and Typst refuses page configuration inside one. The rect is
+        // sized in points to match the page exactly.
+        let body = r##"#rect(
+  width: 256pt, height: 256pt, fill: rgb("#1b1b1f"), stroke: none, radius: 56pt,
+)[
+  #set text(font: "Source Sans 3", fill: rgb("#f5f5f7"), weight: "bold")
+  #align(center + horizon)[
+    #block(spacing: 4pt)[
+      #text(size: 76pt, tracking: -3pt)[MD2]#linebreak()#text(size: 76pt, tracking: -3pt)[PDF]
+    ]
+  ]
+]"##;
+        let el = Element::new(0, ElementClass::Prose, Markup::raw(body.to_string()));
+
+        let ts = Typesetter::new();
+        let (d, _) = ts
+            .probe(std::slice::from_ref(&el), &template)
+            .expect("probe");
+        let c = ts
+            .render(std::slice::from_ref(&el), &template, &d)
+            .expect("render");
+        let (w, h, rgba) = c.raster(0, 4.0).expect("raster");
+        broker
+            .overwrite(std::path::Path::new(&out), &png(w, h, &rgba))
+            .expect("write");
+        println!("wrote {out} ({w}x{h})");
+    }
 }

@@ -39,6 +39,20 @@ impl SourceState {
     }
 }
 
+/// What a dropped path turned into.
+///
+/// Returned by [`Chosen::accept`] so the adapter can do the two things that need a window
+/// — re-sync the destination field's buffer, and ask for a preview — **without deciding
+/// which of them applies**. That decision is here, where it can be tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Accepted {
+    /// It became the Source. `previewable` is true for a single file, the only thing
+    /// `Request::Open` can render — a folder is a batch, and a batch has no one page.
+    Source { previewable: bool },
+    /// It became the destination.
+    Destination,
+}
+
 /// What the user has chosen to do. `JobSettings` in the event storm.
 #[derive(Debug, Clone, Default)]
 pub struct Chosen {
@@ -49,6 +63,28 @@ pub struct Chosen {
 }
 
 impl Chosen {
+    /// Route one dropped path, and say what it became.
+    ///
+    /// A file is **always** the Source — dropping a second one replaces the first rather
+    /// than being silently ignored. A folder is the Source when nothing has been chosen
+    /// and the destination otherwise, so file-then-folder does the common case in two
+    /// gestures.
+    ///
+    /// `is_dir` is passed in rather than read off the path: this is the app's thinking,
+    /// and thinking that touches the disk cannot be tested without one.
+    pub fn accept(&mut self, path: PathBuf, is_dir: bool) -> Accepted {
+        if !is_dir {
+            self.path = Some(path);
+            Accepted::Source { previewable: true }
+        } else if self.path.is_none() {
+            self.path = Some(path);
+            Accepted::Source { previewable: false }
+        } else {
+            self.destination = Some(path);
+            Accepted::Destination
+        }
+    }
+
     /// The Command this describes, or the reason it is not one yet.
     ///
     /// **The engine's `on_collision` has no default by design** — every possible one is
@@ -101,6 +137,10 @@ pub struct App {
     /// Most recent failure, for a status line. Not a log: one message, replaced.
     pub problem: Option<String>,
     pub running: bool,
+    /// A document has been asked for and has not arrived. **Purely so the wait is
+    /// visible** — opening one takes ~900ms, and a window that says "open a document" for
+    /// a second after you dropped one is telling you it ignored you.
+    pub opening: bool,
 }
 
 impl App {
@@ -115,6 +155,19 @@ impl App {
             .and_then(|name| self.catalogue.get(name))
             .map(|found| found.template.clone())
             .unwrap_or_default()
+    }
+
+    /// Record that a Request has gone to the worker.
+    ///
+    /// The mirror of [`absorb`](Self::absorb): everything the window must show *while*
+    /// the engine is busy begins here, so the adapter carries the request rather than
+    /// interpreting it.
+    pub fn sent(&mut self, request: &Request) {
+        match request {
+            Request::Run(_) => self.running = true,
+            Request::Open { .. } => self.opening = true,
+            _ => {}
+        }
     }
 
     /// Fold one Update into the state. **The only way state changes.**
@@ -132,6 +185,7 @@ impl App {
                 self.showing = 0;
                 self.page = None;
                 self.problem = None;
+                self.opening = false;
             }
             Update::Redecided { attention, pages } => {
                 self.attention = Some(*attention);
@@ -145,7 +199,12 @@ impl App {
                 self.showing = page.index;
                 self.page = Some(*page);
             }
-            Update::Failed(message) => self.problem = Some(message),
+            // Whatever was being waited for is not coming. Leaving the spinner up would
+            // be the same lie in the other direction.
+            Update::Failed(message) => {
+                self.problem = Some(message);
+                self.opening = false;
+            }
         }
     }
 
@@ -367,8 +426,87 @@ mod tests {
     }
 
     #[test]
+    fn asking_for_a_document_is_visible_until_it_arrives() {
+        // The whole point of the flag: the wait has to look like a wait.
+        let mut a = app();
+        let request = a.open_request(Path::new("notes.md"));
+        a.sent(&request);
+        assert!(a.opening);
+        a.absorb(Update::Opened {
+            source: PathBuf::from("notes.md"),
+            attention: Box::new(AttentionList::from_diagnostic(&Diagnostic::default())),
+            pages: 3,
+        });
+        assert!(!a.opening, "the spinner outlived the document");
+    }
+
+    #[test]
+    fn a_document_that_fails_to_open_stops_the_wait_too() {
+        // Otherwise the failure is reported *and* the spinner keeps turning, which reads
+        // as still working.
+        let mut a = app();
+        let request = a.open_request(Path::new("broken.md"));
+        a.sent(&request);
+        a.absorb(Update::Failed("no such file".into()));
+        assert!(!a.opening);
+        assert_eq!(a.problem.as_deref(), Some("no such file"));
+    }
+
+    #[test]
     fn nothing_is_rastered_when_nothing_is_open() {
         assert!(app().page_request(2.0).is_none());
+    }
+
+    #[test]
+    fn a_dropped_file_is_the_source_and_is_worth_previewing() {
+        // The bug this exists for: the drop was absorbed and *nothing observable
+        // happened*, because the preview was only reachable from a list that stays empty
+        // until a Job has run. A file lands, and there is immediately a page to draw.
+        let mut chosen = Chosen::default();
+        assert_eq!(
+            chosen.accept(PathBuf::from("notes.md"), false),
+            Accepted::Source { previewable: true }
+        );
+        assert_eq!(chosen.path, Some(PathBuf::from("notes.md")));
+    }
+
+    #[test]
+    fn a_second_file_replaces_the_first_rather_than_being_ignored() {
+        let mut chosen = Chosen::default();
+        chosen.accept(PathBuf::from("first.md"), false);
+        chosen.accept(PathBuf::from("second.md"), false);
+        assert_eq!(chosen.path, Some(PathBuf::from("second.md")));
+        assert!(chosen.destination.is_none(), "a file became a destination");
+    }
+
+    #[test]
+    fn a_folder_is_the_source_first_and_the_destination_after() {
+        // One gesture each, in the order a person does them: what to convert, then where
+        // to put it.
+        let mut chosen = Chosen::default();
+        assert_eq!(
+            chosen.accept(PathBuf::from("docs"), true),
+            // A batch has no single page, so nothing is opened for review.
+            Accepted::Source { previewable: false }
+        );
+        assert_eq!(
+            chosen.accept(PathBuf::from("out"), true),
+            Accepted::Destination
+        );
+        assert_eq!(chosen.path, Some(PathBuf::from("docs")));
+        assert_eq!(chosen.destination, Some(PathBuf::from("out")));
+    }
+
+    #[test]
+    fn a_folder_dropped_after_a_file_is_where_the_pdf_goes() {
+        let mut chosen = Chosen::default();
+        chosen.accept(PathBuf::from("notes.md"), false);
+        assert_eq!(
+            chosen.accept(PathBuf::from("out"), true),
+            Accepted::Destination
+        );
+        // And that is the whole gesture: the pair is now a runnable Command.
+        assert!(chosen.command(false).is_ok());
     }
 
     #[test]
