@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use md2pdf_domain::{AttentionGroup, AttentionList, BlanketResolution, Override, Permit, Template};
 use md2pdf_engine::{Command, Event};
-use md2pdf_template::TemplateCatalogue;
+use md2pdf_template::{roots::Env, TemplateCatalogue};
 
 use crate::preview::Page;
 use crate::worker::{Request, Update};
@@ -51,6 +51,74 @@ pub enum Accepted {
     Source { previewable: bool },
     /// It became the destination.
     Destination,
+}
+
+/// What the typed destination field amounts to.
+///
+/// **The field is the only way to name a folder that is not already on screen** — there
+/// is no native picker, and adding one costs a vendoring round (`plan-app.md`, part 3).
+/// That makes what it accepts worth being exact about, because the alternative is not an
+/// error but a PDF somewhere surprising: a double-clicked `.app` has `/` as its working
+/// directory, so a relative path resolves against the root of the disk.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Destination {
+    /// Nothing typed. Not an error — it is where everyone starts.
+    Empty,
+    /// Usable, and absolute. Carries the expansion, so the window can show what a `~`
+    /// turned into rather than leaving the user to trust it.
+    Folder(PathBuf),
+    /// Typed, and not usable. **Says why** — the whole point of refusing rather than
+    /// writing somewhere unexpected.
+    Rejected(&'static str),
+}
+
+impl Destination {
+    /// Read what was typed, against the environment as a value.
+    ///
+    /// `~` and `~/…` expand from `HOME`. `~user/…` does not: resolving another user's
+    /// home needs the password database, and guessing `/Users/<name>` is wrong on Linux
+    /// and wrong on macOS for any account that has been moved.
+    pub fn parse(text: &str, env: &Env) -> Self {
+        let text = text.trim();
+        if text.is_empty() {
+            return Self::Empty;
+        }
+        if let Some(rest) = text.strip_prefix('~') {
+            if !(rest.is_empty() || rest.starts_with('/')) {
+                return Self::Rejected("another user's home folder cannot be expanded here");
+            }
+            let Some(home) = env.home.as_ref().filter(|h| !h.is_empty()) else {
+                return Self::Rejected("there is no HOME to expand ~ against");
+            };
+            // `strip_prefix('/')`: joining an absolute path *replaces* the base, so
+            // `PathBuf::from(home).join("/Documents")` would silently become
+            // `/Documents` — the exact class of bug this type exists to stop.
+            let rest = rest.trim_start_matches('/');
+            let expanded = if rest.is_empty() {
+                PathBuf::from(home)
+            } else {
+                PathBuf::from(home).join(rest)
+            };
+            return Self::Folder(expanded);
+        }
+        let path = PathBuf::from(text);
+        if path.is_absolute() {
+            Self::Folder(path)
+        } else {
+            // **Refused rather than resolved.** There is no working directory worth
+            // resolving against: launched from Finder it is `/`, launched from a terminal
+            // it is wherever that terminal happened to be.
+            Self::Rejected("type a full path starting with /, or drop the folder onto the window")
+        }
+    }
+
+    /// The folder to write to, if this is one.
+    pub fn folder(&self) -> Option<&Path> {
+        match self {
+            Self::Folder(path) => Some(path),
+            _ => None,
+        }
+    }
 }
 
 /// What the user has chosen to do. `JobSettings` in the event storm.
@@ -127,6 +195,9 @@ impl Chosen {
 pub struct App {
     pub chosen: Chosen,
     pub catalogue: TemplateCatalogue,
+    /// The environment, as a value — so `~` expansion is a pure function and testable
+    /// from a container with a different HOME than the machine it will run on.
+    pub env: Env,
     pub sources: BTreeMap<PathBuf, SourceState>,
     /// The document open for review, if any, and what it conceded.
     pub open: Option<PathBuf>,
@@ -155,6 +226,19 @@ impl App {
             .and_then(|name| self.catalogue.get(name))
             .map(|found| found.template.clone())
             .unwrap_or_default()
+    }
+
+    /// Take what is in the destination field and settle what it means.
+    ///
+    /// Called every frame rather than only on a keystroke: a rejection has to stay on
+    /// screen while the text that caused it is still there, and `changed()` fires once.
+    /// It is idempotent, which is what makes that safe.
+    pub fn type_destination(&mut self, text: &str) -> Destination {
+        let typed = Destination::parse(text, &self.env);
+        // **Cleared when the text is not a usable folder**, so a rejected path disables
+        // Convert instead of leaving the last good one silently in force.
+        self.chosen.destination = typed.folder().map(Path::to_path_buf);
+        typed
     }
 
     /// Record that a Request has gone to the worker.
@@ -616,5 +700,115 @@ mod tests {
             reason: SkipReason::Collision,
         });
         assert!(a.sources[&source].needs_attention());
+    }
+}
+
+#[cfg(test)]
+mod typed_destination {
+    use super::*;
+
+    fn env(home: &str) -> Env {
+        Env {
+            home: Some(home.into()),
+            ..Default::default()
+        }
+    }
+
+    fn app_at(home: &str) -> App {
+        App {
+            env: env(home),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_tilde_expands_against_home() {
+        assert_eq!(
+            Destination::parse("~/Documents/out", &env("/Users/ada")),
+            Destination::Folder(PathBuf::from("/Users/ada/Documents/out"))
+        );
+    }
+
+    #[test]
+    fn a_bare_tilde_is_home_itself() {
+        assert_eq!(
+            Destination::parse("~", &env("/Users/ada")),
+            Destination::Folder(PathBuf::from("/Users/ada"))
+        );
+    }
+
+    #[test]
+    fn the_expansion_does_not_swallow_the_home_it_expanded_from() {
+        // The trap in `PathBuf::join`: joining an *absolute* path replaces the base
+        // rather than appending to it, so a naive `home.join("/Documents/out")` yields
+        // `/Documents/out` — the tilde silently doing nothing at all.
+        let got = Destination::parse("~/Documents/out", &env("/Users/ada"));
+        assert_eq!(got.folder(), Some(Path::new("/Users/ada/Documents/out")));
+        assert_ne!(got.folder(), Some(Path::new("/Documents/out")));
+    }
+
+    #[test]
+    fn a_relative_path_is_refused_rather_than_resolved() {
+        // The defect this closes. A double-clicked `.app` has `/` for a working
+        // directory, so `out` meant `/out` — a write to the root of the disk.
+        assert!(matches!(
+            Destination::parse("out", &env("/Users/ada")),
+            Destination::Rejected(_)
+        ));
+        assert!(matches!(
+            Destination::parse("./out", &env("/Users/ada")),
+            Destination::Rejected(_)
+        ));
+    }
+
+    #[test]
+    fn another_users_home_is_refused_rather_than_guessed() {
+        // `/Users/<name>` is wrong on Linux and wrong on macOS for a moved account.
+        // Resolving it properly needs the password database.
+        assert!(matches!(
+            Destination::parse("~bob/out", &env("/Users/ada")),
+            Destination::Rejected(_)
+        ));
+    }
+
+    #[test]
+    fn a_tilde_with_no_home_says_so_instead_of_writing_to_a_folder_called_tilde() {
+        assert!(matches!(
+            Destination::parse("~/out", &Env::default()),
+            Destination::Rejected(_)
+        ));
+    }
+
+    #[test]
+    fn an_absolute_path_is_taken_as_typed() {
+        assert_eq!(
+            Destination::parse("  /tmp/out  ", &env("/Users/ada")),
+            Destination::Folder(PathBuf::from("/tmp/out")),
+            "surrounding whitespace should not change the answer"
+        );
+    }
+
+    #[test]
+    fn an_empty_field_is_not_an_error() {
+        assert_eq!(
+            Destination::parse("   ", &env("/Users/ada")),
+            Destination::Empty
+        );
+    }
+
+    #[test]
+    fn a_refused_path_cannot_be_converted_with() {
+        // The half that matters at the button: a rejection must *clear* the destination,
+        // not leave the last good one quietly in force under a new label.
+        let mut app = app_at("/Users/ada");
+        app.chosen.path = Some(PathBuf::from("notes.md"));
+        app.type_destination("/tmp/good");
+        assert!(app.chosen.command(false).is_ok());
+
+        app.type_destination("out");
+        assert!(
+            app.chosen.command(false).is_err(),
+            "a refused path still ran a conversion, using the previous destination"
+        );
     }
 }

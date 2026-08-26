@@ -11,7 +11,7 @@
 //! the project written against an API the container cannot run — a mistake here is a
 //! compile error or a misplaced label, never a wrong decision about a page.
 
-use md2pdf_app::state::{App, SourceState};
+use md2pdf_app::state::{App, Destination, SourceState};
 use md2pdf_app::worker::Request;
 
 /// The chosen Sources and what happened to each.
@@ -136,13 +136,29 @@ pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) 
     // every frame loses the caret and fights the typist.
     ui.horizontal(|ui| {
         ui.label("Save to:");
-        if ui.text_edit_singleline(destination).changed() {
-            let trimmed = destination.trim();
-            app.chosen.destination = (!trimmed.is_empty()).then(|| trimmed.into());
-        }
+        ui.text_edit_singleline(destination);
     });
-    if app.chosen.destination.is_none() {
-        ui.small("drop a folder onto the window, or type a path");
+    // Re-read every frame rather than on `changed()`: a rejection has to stay on screen
+    // for as long as the text that caused it does, and `changed()` fires once.
+    match app.type_destination(destination) {
+        Destination::Empty => {
+            ui.small("drop a folder onto the window, or type a full path");
+        }
+        // Refused, and it says why. Typing `~/Documents/out` used to create a folder
+        // *named* `~`, and a bare `out` wrote to the root of the disk, because a
+        // double-clicked .app has `/` for a working directory.
+        Destination::Rejected(why) => {
+            ui.colored_label(ui.visuals().warn_fg_color, why);
+        }
+        // Only when it is not what was typed — showing `/Users/you/out` under a field
+        // already reading `/Users/you/out` is noise, but showing what a `~` became is
+        // the difference between trusting the expansion and checking it.
+        Destination::Folder(path) => {
+            let shown = path.display().to_string();
+            if shown != destination.trim() {
+                ui.small(format!("→ {shown}"));
+            }
+        }
     }
 
     ui.horizontal(|ui| {

@@ -1271,7 +1271,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > is the test. That is the standing cost of the one crate the gate cannot run — recorded again
   > because it has now produced two defects in a row that only a human at the window could see.
 
-- `<pending>` **feat(attention): rank and group the list, and say which page to turn to** (phase 4, part 9).
+- `f096b70` **feat(attention): rank and group the list, and say which page to turn to** (phase 4, part 9).
 
   > **The operator, on the first real document: "note the multiple messages telling me to make the
   > layout landscape. I would prefer not to."** Twenty boxes, all saying *wrapped its cells instead
@@ -1333,3 +1333,37 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > **Every new assertion was mutation-checked** — ranking removed, group-apply truncated to its
   > first element, landscape marker moved outside the block; all three fail, each naming what
   > broke. That habit has now caught one vacuous test and confirmed three real ones this week.
+
+- `<pending>` **fix(app): refuse a destination that is not a full path, and expand `~`** (phase 4, part 10).
+
+  > **A silent wrong write, found by reading the code rather than by losing a PDF.** The typed
+  > destination went straight to `PathBuf::from(trimmed)`. Two ways that ends badly, and neither
+  > announces itself: `~/Documents/out` created a folder **literally named `~`**, and a bare `out`
+  > resolved against the working directory — which for a double-clicked `.app` is `/`, so it
+  > attempted a write to the root of the disk. Both look like success from inside the app.
+  >
+  > `Destination` is now a type with three answers rather than an `Option<PathBuf>` with one.
+  > `Empty` is not an error — it is where everyone starts. `Folder` is absolute and carries the
+  > expansion, so the window can show what a `~` *became* rather than asking to be trusted.
+  > `Rejected` carries the reason, which is the entire argument for refusing instead of writing
+  > somewhere surprising: a message beats a PDF you cannot find.
+  >
+  > **Relative paths are refused, not resolved**, because there is no working directory worth
+  > resolving against — `/` from Finder, and wherever the shell happened to be from a terminal.
+  > `~user/…` is refused too: that needs the password database, and guessing `/Users/<name>` is
+  > wrong on Linux and wrong on macOS for any account that has been moved. Dropping a folder was
+  > never affected — a drop arrives absolute.
+  >
+  > **The subtlest half is one line, and it has a test named after it.** `PathBuf::join` with an
+  > absolute argument *replaces* the base, so the obvious `PathBuf::from(home).join(rest)` turns
+  > `~/Documents/out` into `/Documents/out` — the tilde appearing to work while doing nothing.
+  > The leading slash is stripped first. Mutation-checked: writing the naive version back fails
+  > `the_expansion_does_not_swallow_the_home_it_expanded_from`.
+  >
+  > **A rejection clears `chosen.destination`.** Otherwise a bad path would leave the previous
+  > good one quietly in force and Convert would stay enabled — the button lying about what it is
+  > about to do. Asserted at the `command()` boundary rather than on the field.
+  >
+  > `Env` moved onto `App` (`roots::Env::current()`, read once in `Gui::new`) so expansion is a
+  > pure function of a value — the pattern `roots` already established for exactly this reason,
+  > and what lets a container whose `HOME` is `/home/user` test the macOS case.

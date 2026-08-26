@@ -65,6 +65,9 @@ impl Gui {
         Self {
             app: App {
                 catalogue,
+                // The real environment, read once. Everything downstream of it —
+                // `~` expansion in the destination field — is a pure function of this.
+                env: roots::Env::current(),
                 ..Default::default()
             },
             worker: Worker::spawn(),
