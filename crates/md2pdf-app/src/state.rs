@@ -164,7 +164,7 @@ impl App {
     /// interpreting it.
     pub fn sent(&mut self, request: &Request) {
         match request {
-            Request::Run(_) => self.running = true,
+            Request::Run { .. } => self.running = true,
             Request::Open { .. } => self.opening = true,
             _ => {}
         }
@@ -274,6 +274,17 @@ impl App {
     pub fn open_request(&self, source: &Path) -> Request {
         Request::Open {
             source: source.to_path_buf(),
+            template: Box::new(self.template()),
+        }
+    }
+
+    /// What to ask for when the user starts a Job.
+    ///
+    /// **Built here rather than in the widget, and from the same `template()` the preview
+    /// uses**, which is the only thing that makes "the preview *is* the output" true.
+    pub fn run_request(&self, command: Command) -> Request {
+        Request::Run {
+            command,
             template: Box::new(self.template()),
         }
     }
@@ -423,6 +434,41 @@ mod tests {
             rgba: vec![0; 4],
         });
         assert!(a.page_request(2.0).is_none());
+    }
+
+    #[test]
+    fn the_job_is_run_under_the_template_the_preview_was_drawn_under() {
+        // The defect this closes: `Request::Run` carried no Template and the worker
+        // supplied `Template::default()`, so choosing a template changed the page on
+        // screen and not the PDF on disk. Both requests now come from `template()`.
+        let mut a = app();
+        a.catalogue.found.push(md2pdf_template::Found {
+            template: Template {
+                name: "wide".into(),
+                page_width_pt: 1200.0,
+                ..Template::default()
+            },
+            description: "a wide one".into(),
+            folder: PathBuf::from("/templates/wide"),
+        });
+        a.chosen.template = Some("wide".into());
+
+        let command = Command::ConvertSource {
+            source: PathBuf::from("notes.md"),
+            destination: PathBuf::from("out"),
+        };
+        let Request::Run { template, .. } = a.run_request(command) else {
+            panic!("run_request built something other than a Run");
+        };
+        assert_eq!(template.page_width_pt, 1200.0);
+
+        let Request::Open { template, .. } = a.open_request(Path::new("notes.md")) else {
+            panic!("open_request built something other than an Open");
+        };
+        assert_eq!(
+            template.page_width_pt, 1200.0,
+            "the preview and the Job disagree about the template"
+        );
     }
 
     #[test]

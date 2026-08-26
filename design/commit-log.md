@@ -1099,7 +1099,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `accesskit_windows` are on disk. **[measured]** what matters is unchanged: `cargo tree -e normal`
   > shows zero `wgpu`/`naga` in the enabled tree, so none of it compiles and none of it ships.
 
-- `<pending>` **fix(gui): acknowledge the drop, and draw the icon with the app** (phase 4, part 4).
+- `8021446` **fix(gui): acknowledge the drop, and draw the icon with the app** (phase 4, part 4).
 
   > **The first run on the Mac found the defect the container cannot: "dragging an md file on the
   > window, nothing appears to happen."** It was not a drag-and-drop bug. `absorb_drops` accepted
@@ -1141,3 +1141,33 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > test` runs with the crate as its working directory, so a relative path writes into
   > `crates/md2pdf-engine/assets/` quietly and looks like it worked. It is `#[ignore]`d asset
   > generation, so `verify.sh` never runs it.
+
+- `<pending>` **fix(app): run the Job under the chosen Template, not the default one** (phase 4, part 5).
+
+  > **`Request::Run` carried no Template**, so the worker built a `Template::default()` for every
+  > Job while `Request::Open` used `App::template()`. Choosing a template therefore changed the
+  > preview and not the PDF — and `widgets.rs` claims, in a doc comment, that the preview *is* the
+  > output. It was the read model that was honest and the write path that was not.
+  >
+  > `Run(Command)` became `Run { command, template }`, matching `Open`, and both are now built by
+  > `md2pdf-app` — `run_request()` beside `open_request()`, from the same `template()`. The widget
+  > lost its last direct `Request` construction, so the rule that *nothing in `md2pdf-gui` decides
+  > anything about a document* holds without an exception.
+  >
+  > **The first test I wrote for it passed with the bug still in place**, and the only reason that
+  > was caught is that I put the bug back and ran it. It asserted `SourceState::Written`, which
+  > `md2pdf-app` derives from `SourceConverted.compromises` — and **[measured]** that field reports
+  > `0` for a document whose `DiagnosticSealed` carries a `Reflowed`. The assertion moved to the
+  > seal, where the difference is real: a 1400pt page fits the wide table and concedes nothing, A4
+  > reflows it. With the bug restored the test fails and names the `Reflowed` in its message.
+  >
+  > **Chasing that insensitivity found a second defect — and it is ours, not the engine's.**
+  > `contract.rs` says so in as many words: `SourceConverted` carries *conversion-time* counts and
+  > "`the complete set of concessions arrives later, in DiagnosticSealed`", which exists precisely
+  > because 70 documents once reported as needing attention and only 2 could say why. `report.rs`
+  > consumes the seal; `App::absorb_event` **drops it on the `_ => {}` arm** and flags from the
+  > partial count instead. So every escalation-ladder concession — shrunk, rotated, reflowed,
+  > clipped — is invisible to the GUI's Flagged state and to the summary sentence the whole design
+  > aims at, in exactly the way the seal was added to prevent. It is a one-armed fix, and it is
+  > deliberately **not** in this commit: it is a different defect in a different read model, and
+  > burying it inside a template fix is how it would stop being findable.

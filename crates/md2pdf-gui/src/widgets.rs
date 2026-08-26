@@ -156,7 +156,7 @@ pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) 
     match app.chosen.command(is_directory) {
         Ok(command) => {
             let go = ui.add_enabled(!app.running, egui::Button::new("Convert"));
-            go.clicked().then_some(Request::Run(command))
+            go.clicked().then(|| app.run_request(command))
         }
         Err(missing) => {
             // The button is disabled *and says why*. A greyed-out control with no

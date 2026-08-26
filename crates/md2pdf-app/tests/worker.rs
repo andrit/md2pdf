@@ -41,10 +41,12 @@ fn a_job_runs_on_the_worker_and_streams_events_back() {
     let source = tmp.write("notes.md", b"# Title\n\nSome prose.\n");
     let worker = Worker::spawn();
 
-    assert!(worker.send(Request::Run(Command::ConvertSource {
-        source: source.clone(),
-        destination: tmp.join("out"),
-    })));
+    assert!(
+        worker.send(App::default().run_request(Command::ConvertSource {
+            source: source.clone(),
+            destination: tmp.join("out"),
+        }))
+    );
 
     let updates = collect(&worker, |all| {
         all.iter()
@@ -60,17 +62,78 @@ fn a_job_runs_on_the_worker_and_streams_events_back() {
     assert!(tmp.join("out/notes.pdf").is_file(), "no PDF was written");
 }
 
+/// The wide table that will not fit on A4. Reused: it is the cheapest thing that makes
+/// the engine visibly concede.
+const WIDE_TABLE: &[u8] = b"# Report\n\n| a | b | c | d | e |\n|---|---|---|---|---|\n\
+     | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx \
+     | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx |\n";
+
+#[test]
+fn a_job_is_typeset_under_the_chosen_template_not_the_default_one() {
+    // The regression: `Request::Run` carried no Template, so the worker built a
+    // `Template::default()` and the chosen one reached the preview only. Asserted through
+    // the engine's own event rather than the request, because the request being right and
+    // the worker ignoring it is exactly the bug that was here.
+    //
+    // **[measured]** a 1400pt page fits the table and seals an empty Diagnostic; A4
+    // reflows it and seals a `Reflowed`. So what was conceded *is* the answer to "which
+    // template did the Job actually use". Verified by putting the bug back: this test
+    // fails with the Reflowed in its message.
+    let tmp = TempDir::new("app-template");
+    let source = tmp.write("wide.md", WIDE_TABLE);
+    let worker = Worker::spawn();
+
+    let mut app = App::default();
+    app.catalogue.found.push(md2pdf_template::Found {
+        template: md2pdf_domain::Template {
+            name: "wide".into(),
+            page_width_pt: 1400.0,
+            ..Default::default()
+        },
+        description: "wide enough for the table".into(),
+        folder: tmp.join("templates/wide"),
+    });
+    app.chosen.template = Some("wide".into());
+
+    worker.send(app.run_request(Command::ConvertSource {
+        source: source.clone(),
+        destination: tmp.join("out"),
+    }));
+    let updates = collect(&worker, |all| {
+        all.iter().any(
+            |u| matches!(u, Update::Engine(e) if matches!(**e, md2pdf_engine::Event::OutputWritten { .. })),
+        )
+    });
+
+    // Asserted against the sealed Diagnostic rather than `SourceConverted.compromises`:
+    // that field is *conversion-time counts only* by contract, and the complete set
+    // arrives in `DiagnosticSealed`. `App::absorb_event` ignores the seal and flags from
+    // the partial count, which is its own defect — see the commit log.
+    let conceded: Vec<_> = updates
+        .iter()
+        .filter_map(|u| match u {
+            Update::Engine(e) => match &**e {
+                md2pdf_engine::Event::DiagnosticSealed { compromises, .. } => Some(compromises),
+                _ => None,
+            },
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert!(
+        conceded.is_empty(),
+        "the table conceded {conceded:?}, so the Job ran under A4 rather than the 1400pt \
+         template it was given"
+    );
+    assert!(tmp.join("out/wide.pdf").is_file(), "no PDF was written");
+}
+
 #[test]
 fn a_document_opens_for_review_and_an_override_re_decides_it() {
     // The 3f loop, driven the way the app will drive it: open, look at what was
     // conceded, allow something, and get a fresh decision back.
     let tmp = TempDir::new("app-review");
-    let source = tmp.write(
-        "wide.md",
-        b"# Report\n\n| a | b | c | d | e |\n|---|---|---|---|---|\n\
-          | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx \
-          | xxxxxxxxxxxxxxxxxxxxxxxx | xxxxxxxxxxxxxxxxxxxxxxxx |\n",
-    );
+    let source = tmp.write("wide.md", WIDE_TABLE);
     let worker = Worker::spawn();
     let mut app = App::default();
 

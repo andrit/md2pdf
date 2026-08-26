@@ -35,7 +35,15 @@ use crate::preview::Page;
 /// What the UI asks the engine to do.
 pub enum Request {
     /// Run a Job — one Source or a whole tree. Events stream back as it goes.
-    Run(Command),
+    ///
+    /// **The Template travels with the Command**, exactly as it does for [`Self::Open`].
+    /// It used to be `Run(Command)` and the worker supplied `Template::default()`, so
+    /// picking a template changed the preview and not the PDF — a preview that can
+    /// disagree with the output is not one.
+    Run {
+        command: Command,
+        template: Box<Template>,
+    },
     /// Open one document for review, without writing anything.
     Open {
         source: PathBuf,
@@ -130,8 +138,7 @@ fn run(requests: Receiver<Request>, updates: Sender<Update>) {
         match request {
             Request::Stop => break,
 
-            Request::Run(command) => {
-                let template = Template::default();
+            Request::Run { command, template } => {
                 let deps = Deps {
                     broker: &broker,
                     typesetter: &typesetter,
