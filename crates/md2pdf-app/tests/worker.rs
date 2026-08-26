@@ -129,6 +129,40 @@ fn a_job_is_typeset_under_the_chosen_template_not_the_default_one() {
 }
 
 #[test]
+fn a_table_the_ladder_reflowed_is_reported_as_needing_attention() {
+    // Through the real engine, because the defect lived in the gap between what the
+    // engine emits and what this crate listens to. Conversion concedes *nothing* for this
+    // document — `SourceConverted.compromises` is 0 — and the ladder reflows the table at
+    // typeset time. The app used to fold that into "1 converted cleanly", which is the
+    // exact failure `DiagnosticSealed` was added to prevent.
+    let tmp = TempDir::new("app-flagged");
+    let source = tmp.write("wide.md", WIDE_TABLE);
+    let worker = Worker::spawn();
+    let mut app = App::default();
+
+    worker.send(app.run_request(Command::ConvertSource {
+        source: source.clone(),
+        destination: tmp.join("out"),
+    }));
+    for update in collect(&worker, |all| {
+        all.iter().any(
+            |u| matches!(u, Update::Engine(e) if matches!(**e, md2pdf_engine::Event::OutputWritten { .. })),
+        )
+    }) {
+        app.absorb(update);
+    }
+
+    assert_eq!(
+        app.sources.get(&source),
+        Some(&md2pdf_app::state::SourceState::Flagged),
+        "the ladder reflowed the table and the app called it clean"
+    );
+    assert_eq!(app.summary(), "0 converted cleanly, 1 need your attention.");
+    // And it was still written — flagged is not failed.
+    assert!(tmp.join("out/wide.pdf").is_file(), "no PDF was written");
+}
+
+#[test]
 fn a_document_opens_for_review_and_an_override_re_decides_it() {
     // The 3f loop, driven the way the app will drive it: open, look at what was
     // conceded, allow something, and get a fresh decision back.

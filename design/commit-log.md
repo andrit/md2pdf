@@ -1142,7 +1142,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > `crates/md2pdf-engine/assets/` quietly and looks like it worked. It is `#[ignore]`d asset
   > generation, so `verify.sh` never runs it.
 
-- `<pending>` **fix(app): run the Job under the chosen Template, not the default one** (phase 4, part 5).
+- `6a092d7` **fix(app): run the Job under the chosen Template, not the default one** (phase 4, part 5).
 
   > **`Request::Run` carried no Template**, so the worker built a `Template::default()` for every
   > Job while `Request::Open` used `App::template()`. Choosing a template therefore changed the
@@ -1171,3 +1171,33 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > aims at, in exactly the way the seal was added to prevent. It is a one-armed fix, and it is
   > deliberately **not** in this commit: it is a different defect in a different read model, and
   > burying it inside a template fix is how it would stop being findable.
+
+- `<pending>` **fix(app): flag a Source from the sealed Diagnostic, not the conversion count** (phase 4, part 6).
+
+  > **The defect the previous commit found, closed.** `App::absorb_event` flagged from
+  > `SourceConverted.compromises` — the *conversion* half — and dropped `DiagnosticSealed` on its
+  > `_ => {}` arm. Everything the escalation ladder does happens after conversion, so a document
+  > whose table was shrunk, rotated, reflowed or **clipped** reported `compromises: 0` and folded
+  > into *"1 converted cleanly."* The one document in a batch that most needed a person got the
+  > sentence that says nobody needs to look.
+  >
+  > **[measured]** `job.rs` emits the seal only when `diagnostic.is_flagged()`, and seals both
+  > halves into it (`INV-4`). So presence *is* the flag and the payload *is* the reason — there is
+  > nothing to combine, and `SourceConverted` now only ever produces `Converted`. **One event
+  > decides Flagged**, which is what makes the rule statable in a sentence; the previous version
+  > had the answer split across a partial count and an ignored event, which is why it read as
+  > correct.
+  >
+  > This is the same failure the seal itself was introduced for — *"70 documents reported as
+  > needing attention and only 2 could say why"* — arriving one adapter later. The CLI's
+  > `report.rs` consumed the seal from the start; the GUI's read model, written afterwards,
+  > reached for the field that was closer to hand. **A contract event that one adapter ignores is
+  > not a contract**, and the cost of ignoring it was hidden because the wrong answer is the
+  > reassuring one.
+  >
+  > **Both new tests were mutation-checked** — the defect put back, the test observed to fail with
+  > the reason in its message (`left: Some(Written), right: Some(Flagged)`). That discipline is
+  > not ceremony here: the *first* test written for the previous commit passed with its bug still
+  > in place, and nothing but re-running it against the defect would have shown that. Two of the
+  > three rewritten unit tests had encoded the old behaviour as correct; the third passed either
+  > way and changed only to use the new helper.

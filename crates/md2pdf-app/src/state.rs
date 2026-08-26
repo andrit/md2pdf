@@ -210,19 +210,25 @@ impl App {
 
     fn absorb_event(&mut self, event: Event) {
         match event {
-            Event::SourceConverted {
+            // **Converted, never Flagged.** `SourceConverted.compromises` counts the
+            // *conversion* half only — `contract.rs` says so, and says the complete
+            // answer arrives in `DiagnosticSealed`. Flagging from it made every
+            // escalation-ladder concession (shrunk, rotated, reflowed, clipped) invisible
+            // to this crate: a batch of reflowed tables reported "converted cleanly",
+            // which is the exact failure the seal was added to prevent.
+            Event::SourceConverted { source, .. } => {
+                self.sources.insert(source, SourceState::Converted);
+            }
+            // The one place a Source becomes Flagged. The engine seals both halves of the
+            // pipeline into this (`INV-4`) and emits it only when there is something to
+            // say, so the payload is the whole truth about what needed a judgment call.
+            Event::DiagnosticSealed {
                 source,
                 compromises,
-                ..
             } => {
-                self.sources.insert(
-                    source,
-                    if compromises > 0 {
-                        SourceState::Flagged
-                    } else {
-                        SourceState::Converted
-                    },
-                );
+                if !compromises.is_empty() {
+                    self.sources.insert(source, SourceState::Flagged);
+                }
             }
             Event::OutputWritten { source, .. } => {
                 // Written beats Converted, but never overwrites Flagged: a flagged
@@ -323,6 +329,28 @@ mod tests {
         App::default()
     }
 
+    /// A sealed Diagnostic for `source`, the way the engine emits one: only when the
+    /// document conceded something, carrying what it conceded.
+    fn sealed(source: &str) -> Event {
+        Event::DiagnosticSealed {
+            source: PathBuf::from(source),
+            compromises: vec![md2pdf_domain::Compromise {
+                id: md2pdf_domain::ElementId::new(1, "#table(columns: 5)"),
+                kind: md2pdf_domain::CompromiseKind::Reflowed,
+                page: None,
+            }],
+        }
+    }
+
+    fn converted(source: &str) -> Event {
+        Event::SourceConverted {
+            source: PathBuf::from(source),
+            elements: 1,
+            images: 0,
+            compromises: 0,
+        }
+    }
+
     #[test]
     fn a_flagged_source_stays_flagged_when_its_output_is_written() {
         // Flagged is not failed: the document converted *and* was written, and something
@@ -330,12 +358,8 @@ mod tests {
         // attention gate exactly when it matters.
         let mut a = app();
         let source = PathBuf::from("notes.md");
-        a.absorb_event(Event::SourceConverted {
-            source: source.clone(),
-            elements: 10,
-            images: 0,
-            compromises: 2,
-        });
+        a.absorb_event(converted("notes.md"));
+        a.absorb_event(sealed("notes.md"));
         a.absorb_event(Event::OutputWritten {
             source: source.clone(),
             path: PathBuf::from("out/notes.pdf"),
@@ -344,28 +368,41 @@ mod tests {
     }
 
     #[test]
+    fn a_ladder_concession_flags_the_source_even_though_conversion_was_clean() {
+        // The defect this closes. A reflowed table concedes nothing at *conversion* time
+        // — `SourceConverted.compromises` is 0 — and everything at typeset time. Flagging
+        // from the first number meant the document that most needed attention got none.
+        let mut a = app();
+        a.absorb_event(converted("wide.md"));
+        assert_eq!(
+            a.sources.get(Path::new("wide.md")),
+            Some(&SourceState::Converted),
+            "flagged before anything had been sealed"
+        );
+        a.absorb_event(sealed("wide.md"));
+        assert_eq!(
+            a.sources.get(Path::new("wide.md")),
+            Some(&SourceState::Flagged)
+        );
+        assert_eq!(a.summary(), "0 converted cleanly, 1 need your attention.");
+    }
+
+    #[test]
     fn the_summary_is_the_sentence_the_design_aims_at() {
         let mut a = app();
-        for (name, compromises) in [("a.md", 0), ("b.md", 0), ("c.md", 3)] {
-            a.absorb_event(Event::SourceConverted {
-                source: PathBuf::from(name),
-                elements: 1,
-                images: 0,
-                compromises,
-            });
+        for name in ["a.md", "b.md", "c.md"] {
+            a.absorb_event(converted(name));
         }
+        a.absorb_event(sealed("c.md"));
         assert_eq!(a.summary(), "2 converted cleanly, 1 need your attention.");
     }
 
     #[test]
     fn a_clean_run_does_not_mention_attention_at_all() {
+        // No seal arrives for a clean document — the engine only emits one when there is
+        // something to say.
         let mut a = app();
-        a.absorb_event(Event::SourceConverted {
-            source: PathBuf::from("a.md"),
-            elements: 1,
-            images: 0,
-            compromises: 0,
-        });
+        a.absorb_event(converted("a.md"));
         assert_eq!(a.summary(), "1 converted cleanly.");
     }
 
