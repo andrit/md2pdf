@@ -18,6 +18,8 @@
 //! carries a [`Permit`] instead, the ProbePass measures under it, and there is no longer a
 //! way to name an orientation without a size to go with it. See `design/plan-review.md`.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostic::{Compromise, CompromiseKind, Diagnostic};
@@ -62,6 +64,38 @@ pub struct Attention {
     pub id: ElementId,
     pub what: CompromiseKind,
     pub offers: Vec<OfferedFix>,
+    /// 1-based page it landed on, once the document has been laid out.
+    ///
+    /// `None` until then, and **`None` rather than a guess** where the layout could not
+    /// place it. Only the RenderPass knows this — a sealed Diagnostic is built from
+    /// probe decisions, and the probe measures elements outside the page flow.
+    pub page: Option<u32>,
+}
+
+/// Every Element that made the same kind of concession, as one row.
+///
+/// **`what` is a representative, not a summary.** Members of a group differ only in
+/// detail — two elements shrunk to 9pt and 8pt share a row and the row names one of the
+/// sizes. That detail is the least of what the reader needs; *how many* and *where* is
+/// the most, and both are exact.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AttentionGroup {
+    /// What made these one row. Not shown — `CompromiseKind::group_key`.
+    pub key: String,
+    pub what: CompromiseKind,
+    pub ids: Vec<ElementId>,
+    /// Pages to turn to, ascending and deduplicated. Empty when the document has not
+    /// been laid out, or where the layout could not place the Element.
+    pub pages: Vec<u32>,
+    /// Identical for every member, because `offers_for` reads only the variant — which
+    /// is what makes one button for the whole row honest.
+    pub offers: Vec<OfferedFix>,
+}
+
+impl AttentionGroup {
+    pub fn count(&self) -> usize {
+        self.ids.len()
+    }
 }
 
 /// Everything in one document that needed a judgment call.
@@ -84,6 +118,7 @@ impl AttentionList {
                     id: c.id,
                     what: c.kind.clone(),
                     offers: offers_for(c),
+                    page: c.page,
                 })
                 .collect(),
         }
@@ -91,6 +126,55 @@ impl AttentionList {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+
+    /// The list a person should actually read: one row per kind of concession, worst
+    /// first, each saying how many Elements made it and which pages to turn to.
+    ///
+    /// **Grouping and ranking are read-model work, not display work**, which is why they
+    /// are here where they can be tested rather than in the widget that cannot be. The
+    /// window draws this in order and adds no judgment of its own.
+    ///
+    /// Ordering within a severity band is by first appearance, so two runs of the same
+    /// document produce the same list.
+    pub fn grouped(&self) -> Vec<AttentionGroup> {
+        let mut groups: Vec<AttentionGroup> = Vec::new();
+        for item in &self.items {
+            let key = item.what.group_key();
+            match groups.iter_mut().find(|g| g.key == key) {
+                Some(group) => {
+                    group.ids.push(item.id);
+                    group.pages.extend(item.page);
+                }
+                None => groups.push(AttentionGroup {
+                    key,
+                    what: item.what.clone(),
+                    ids: vec![item.id],
+                    pages: item.page.into_iter().collect(),
+                    offers: item.offers.clone(),
+                }),
+            }
+        }
+        for group in &mut groups {
+            group.pages.sort_unstable();
+            group.pages.dedup();
+        }
+        // Stable, so equal severities keep the order the document put them in.
+        groups.sort_by_key(|g| g.what.severity());
+        groups
+    }
+
+    /// Attach the page each Element landed on, keyed by `ElementId::order`.
+    ///
+    /// **Composed in rather than looked up**, because this crate cannot ask a document
+    /// anything — the map comes from `Compilation::element_pages()` and the adapter
+    /// carries it across. An Element missing from the map keeps whatever page it had,
+    /// which is `None`: a reference that is confidently wrong is worse than none.
+    pub fn with_pages(mut self, pages: &BTreeMap<u32, u32>) -> Self {
+        for item in &mut self.items {
+            item.page = pages.get(&item.id.order).copied().or(item.page);
+        }
+        self
     }
 
     /// Only the entries md2pdf can actually do something about.
@@ -229,5 +313,138 @@ mod tests {
                 "{kind:?} is fixable but offers nothing"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod grouping {
+    use super::*;
+    use crate::diagnostic::{Compromise, Severity};
+
+    fn at(order: u32, kind: CompromiseKind, page: Option<u32>) -> Compromise {
+        Compromise {
+            id: ElementId::new(order, "body"),
+            kind,
+            page,
+        }
+    }
+
+    fn list(compromises: Vec<Compromise>) -> AttentionList {
+        AttentionList::from_diagnostic(&Diagnostic { compromises })
+    }
+
+    #[test]
+    fn the_worst_thing_that_happened_is_first() {
+        // The defect this exists for: five reflowed tables and one clipped element, and
+        // the clipped one — the only one that *lost* anything — was sixth on the list and
+        // off the bottom of the panel.
+        let l = list(vec![
+            at(0, CompromiseKind::Reflowed, Some(1)),
+            at(1, CompromiseKind::Reflowed, Some(2)),
+            at(2, CompromiseKind::ShrunkToFloor { size_pt: 9.0 }, Some(2)),
+            at(3, CompromiseKind::Clipped, Some(4)),
+            at(4, CompromiseKind::Reflowed, Some(5)),
+        ]);
+        let kinds: Vec<_> = l.grouped().iter().map(|g| g.what.severity()).collect();
+        assert_eq!(
+            kinds,
+            vec![Severity::Lost, Severity::Reduced, Severity::Intact],
+            "the list is not ordered worst-first"
+        );
+        assert_eq!(l.grouped()[0].what, CompromiseKind::Clipped);
+    }
+
+    #[test]
+    fn one_row_per_kind_however_many_elements_made_it() {
+        let l = list(vec![
+            at(0, CompromiseKind::Reflowed, Some(1)),
+            at(1, CompromiseKind::Reflowed, Some(4)),
+            at(2, CompromiseKind::Reflowed, Some(4)),
+        ]);
+        let groups = l.grouped();
+        assert_eq!(groups.len(), 1, "three tables drew three rows");
+        assert_eq!(groups[0].count(), 3);
+        // Deduplicated and ascending: two elements on page 4 is still one page to turn to.
+        assert_eq!(groups[0].pages, vec![1, 4]);
+    }
+
+    #[test]
+    fn elements_shrunk_to_different_sizes_still_share_a_row() {
+        // They made the same kind of concession and carry the same offers. Splitting on
+        // the exact point size would rebuild the noise grouping exists to collapse.
+        let l = list(vec![
+            at(0, CompromiseKind::ShrunkToFloor { size_pt: 9.0 }, Some(1)),
+            at(1, CompromiseKind::ShrunkToFloor { size_pt: 8.0 }, Some(3)),
+        ]);
+        assert_eq!(l.grouped().len(), 1);
+        assert_eq!(l.grouped()[0].count(), 2);
+    }
+
+    #[test]
+    fn each_unrepresentable_construct_keeps_its_own_row() {
+        // The exception, and it is deliberate: "2 things md2pdf could not represent"
+        // names neither of them, and each is a different thing to go and fix.
+        let l = list(vec![
+            at(
+                0,
+                CompromiseKind::UnsupportedConstruct {
+                    construct: "footnote".into(),
+                },
+                Some(1),
+            ),
+            at(
+                1,
+                CompromiseKind::UnsupportedConstruct {
+                    construct: "task list".into(),
+                },
+                Some(2),
+            ),
+        ]);
+        assert_eq!(l.grouped().len(), 2);
+    }
+
+    #[test]
+    fn a_group_offers_what_every_member_was_offered() {
+        // What makes one button for a whole row honest — `offers_for` reads only the
+        // variant, so every member of a group was offered the same thing.
+        let l = list(vec![
+            at(0, CompromiseKind::Reflowed, None),
+            at(1, CompromiseKind::Reflowed, None),
+        ]);
+        let group = &l.grouped()[0];
+        for id in &group.ids {
+            let item = l.items.iter().find(|i| i.id == *id).expect("member");
+            assert_eq!(item.offers, group.offers);
+        }
+        // And with no layout yet, it says nothing about pages rather than guessing.
+        assert!(group.pages.is_empty());
+    }
+
+    #[test]
+    fn pages_are_attached_from_the_laid_out_document() {
+        let mut pages = BTreeMap::new();
+        pages.insert(0, 3);
+        pages.insert(1, 7);
+        let l = list(vec![
+            at(0, CompromiseKind::Reflowed, None),
+            at(1, CompromiseKind::Reflowed, None),
+        ])
+        .with_pages(&pages);
+        assert_eq!(l.grouped()[0].pages, vec![3, 7]);
+    }
+
+    #[test]
+    fn an_element_the_layout_could_not_place_reports_no_page() {
+        // Rather than defaulting to page 1, which would send the reader somewhere
+        // confidently wrong.
+        let mut pages = BTreeMap::new();
+        pages.insert(0, 3);
+        let l = list(vec![
+            at(0, CompromiseKind::Reflowed, None),
+            at(9, CompromiseKind::Reflowed, None),
+        ])
+        .with_pages(&pages);
+        assert_eq!(l.grouped()[0].pages, vec![3], "a missing page was invented");
+        assert!(l.items[1].page.is_none());
     }
 }

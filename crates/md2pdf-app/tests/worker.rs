@@ -205,6 +205,112 @@ fn a_document_opens_for_review_and_an_override_re_decides_it() {
 }
 
 #[test]
+fn an_attention_entry_says_which_page_to_turn_to() {
+    // The whole chain, because every link is in a different crate: the RenderPass leaves
+    // a marker, `Compilation::element_pages` reads it back through the introspector, the
+    // worker composes it into the list, and the window draws it.
+    //
+    // Two identical wide tables with a page of prose between them. Asserted *relatively*
+    // — the second must land later than the first — so the test pins the mechanism
+    // rather than the font metrics that decide exactly where a page breaks.
+    let table = String::from_utf8(WIDE_TABLE.to_vec()).expect("utf8");
+    let filler = "Prose that exists only to fill a page, at length. ".repeat(40);
+    let markdown = format!("{table}\n\n{filler}\n\n{filler}\n\n{table}\n");
+
+    let tmp = TempDir::new("app-pages");
+    let source = tmp.write("two.md", markdown.as_bytes());
+    let worker = Worker::spawn();
+    let mut app = App::default();
+
+    worker.send(app.open_request(&source));
+    for update in collect(&worker, |all| {
+        all.iter().any(|u| matches!(u, Update::Opened { .. }))
+    }) {
+        app.absorb(update);
+    }
+
+    let list = app.attention.as_ref().expect("opened without a list");
+    let pages: Vec<u32> = list
+        .items
+        .iter()
+        .map(|i| i.page.expect("an entry could not say what page it is on"))
+        .collect();
+    assert_eq!(
+        pages.len(),
+        2,
+        "expected one entry per table, got {pages:?}"
+    );
+    assert_eq!(pages[0], 1, "the first table is not on page 1");
+    assert!(
+        pages[1] > pages[0],
+        "both tables report page {:?} — the marker is not tracking the layout",
+        pages
+    );
+    assert!(
+        pages[1] as usize <= app.pages,
+        "page {} is past the end of a {}-page document",
+        pages[1],
+        app.pages
+    );
+}
+
+#[test]
+fn one_click_on_a_grouped_row_re_decides_every_element_in_it() {
+    // What the window actually sends now: the attention list groups three reflowed
+    // tables into one row, and its single button must move all three — in one re-decide,
+    // not three.
+    let table = String::from_utf8(WIDE_TABLE.to_vec()).expect("utf8");
+    let tmp = TempDir::new("app-group");
+    let source = tmp.write(
+        "three.md",
+        format!("{table}\n{table}\n{table}\n").as_bytes(),
+    );
+    let worker = Worker::spawn();
+    let mut app = App::default();
+
+    worker.send(app.open_request(&source));
+    for update in collect(&worker, |all| {
+        all.iter().any(|u| matches!(u, Update::Opened { .. }))
+    }) {
+        app.absorb(update);
+    }
+
+    let groups = app.attention.as_ref().expect("no list").grouped();
+    assert_eq!(groups.len(), 1, "three identical tables drew {groups:?}");
+    let group = &groups[0];
+    assert_eq!(group.count(), 3);
+    let offer = group.offers.first().expect("nothing to click").permit;
+
+    worker.send(app.allow_group_request(group, offer));
+    let updates = collect(&worker, |all| {
+        all.iter().any(|u| matches!(u, Update::Redecided { .. }))
+    });
+    assert_eq!(
+        updates
+            .iter()
+            .filter(|u| matches!(u, Update::Redecided { .. }))
+            .count(),
+        1,
+        "one row, one re-decide — three applies would redraw the list three times"
+    );
+    for update in updates {
+        app.absorb(update);
+    }
+
+    // Every one of them moved: none is still reporting the concession that was allowed
+    // away. The permission was Landscape, so nothing should still be reflowing.
+    let after = app.attention.as_ref().expect("no list after");
+    assert!(
+        !after
+            .items
+            .iter()
+            .any(|i| i.what == md2pdf_domain::CompromiseKind::Reflowed),
+        "a table was left behind by the group's button: {:?}",
+        after.items
+    );
+}
+
+#[test]
 fn a_page_comes_back_as_pixels() {
     // The Preview read model *is* the output: the same Compilation that writes the PDF
     // is the one rastered. A preview that could disagree with the PDF would not be one.
@@ -254,10 +360,12 @@ fn a_stale_override_is_reported_rather_than_silently_ignored() {
         app.absorb(update);
     }
 
-    worker.send(Request::Allow(md2pdf_domain::Override {
+    // A one-element list is still the stale case: `apply_all` reports how many named a
+    // live Element, and none did.
+    worker.send(Request::Allow(vec![md2pdf_domain::Override {
         id: md2pdf_domain::ElementId::new(99, "not in this document"),
         permit: Permit::Landscape,
-    }));
+    }]));
     for update in collect(&worker, |all| {
         all.iter().any(|u| matches!(u, Update::Failed(_)))
     }) {

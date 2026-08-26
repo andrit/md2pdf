@@ -91,6 +91,20 @@ impl Compilation {
     pub fn page_count(&self) -> usize {
         self.doc.pages().len()
     }
+
+    /// Which page each Element landed on, by `ElementId::order`, 1-based.
+    ///
+    /// **The answer only the final layout has.** A Compromise records *what* was conceded
+    /// but not *where* it ended up: the ProbePass measures elements outside the page flow
+    /// precisely so that it can measure them at all, so nothing before this point knows
+    /// about pages. The RenderPass leaves a labelled `#metadata` marker per Element and
+    /// this reads them back through the introspector — the in-process equivalent of
+    /// `typst query`, which is CLI-only.
+    ///
+    /// An Element that breaks across pages reports the page it **starts** on.
+    pub fn element_pages(&self) -> std::collections::BTreeMap<u32, u32> {
+        harvest::element_pages(&self.doc)
+    }
 }
 
 /// Release memoised results older than `max_age` compilations.

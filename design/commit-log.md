@@ -1241,7 +1241,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > catch silent drift went silent, over an invisible character. Subjects are now `.strip()`ed
   > before matching, and the hash it then found is filled in above.
 
-- `<pending>` **fix(gui): bound the panels, so one file path cannot eat the window** (phase 4, part 8).
+- `32122c0` **fix(gui): bound the panels, so one file path cannot eat the window** (phase 4, part 8).
 
   > **The first real use of the app found it in one gesture.** A markdown file dropped from
   > `~/Documents/RitterEnterprises/AIDevWorkBench/knowledgebase/mechInterpret-cattheory/` left the
@@ -1270,3 +1270,66 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > this is `cargo check` plus reading the vendored widget source, and the operator's next launch
   > is the test. That is the standing cost of the one crate the gate cannot run — recorded again
   > because it has now produced two defects in a row that only a human at the window could see.
+
+- `<pending>` **feat(attention): rank and group the list, and say which page to turn to** (phase 4, part 9).
+
+  > **The operator, on the first real document: "note the multiple messages telling me to make the
+  > layout landscape. I would prefer not to."** Twenty boxes, all saying *wrapped its cells instead
+  > of shrinking*, all offering the one thing they did not want.
+  >
+  > **The offer was the symptom; the ranking was the defect.** `offers_for` already knew — *"clipping
+  > is not offered, because reflow already lost nothing"* — and the list gave that outcome the same
+  > box, weight and position as `Clipped`, which is the one where content was **destroyed**. Reflow
+  > is also by far the commonest, so the mildest concession was reliably burying the only one that
+  > must never be missed. A list called *"Needs your attention"* that sorts by nothing is a list
+  > that cannot be read.
+  >
+  > `CompromiseKind::severity()` is the answer, and it is a **domain judgment rather than a display
+  > preference** — the question it settles is how much of the author's document survived: `Lost`
+  > (clipped, missing image, unrepresentable construct), `Reduced` (shrunk, scaled, rotated),
+  > `Intact` (reflowed). It lives beside the kinds it ranks, so the CLI can sort by it too.
+  >
+  > **Grouped by variant, not by rendered text.** Two elements shrunk to 9pt and 8pt made the same
+  > concession and — `offers_for` reads only the variant — carry the same offers, which is exactly
+  > what makes one button for a whole row honest. `UnsupportedConstruct` is the deliberate
+  > exception and keeps the construct in its key: *"3 things md2pdf could not represent"* names
+  > none of them, and each is a different thing to go and fix.
+  >
+  > **`Request::Allow` became a list, and `Review::apply_all` re-decides once.** One row is one
+  > intention; five `apply` calls would re-probe five times and emit four intermediate decisions
+  > nobody asked to see. `refresh` already took a set of ids, so the whole row costs one probe.
+  > Stale semantics are unchanged and now stated: `apply_all` returns how many Overrides named a
+  > live Element, and zero is the condition `apply` returned `false` for.
+  >
+  > ## The page reference, which was not a small addition
+  >
+  > `Compromise.page` has existed since T13, documented *"when known"*, and **nothing has ever
+  > populated it** — every value in the codebase was `None`. It could not have been otherwise: a
+  > Diagnostic is sealed from ProbePass decisions, and the probe measures elements *outside the
+  > page flow* precisely so that it can measure them at all. Only the final layout knows.
+  >
+  > So the RenderPass now leaves a labelled zero-size `#metadata` marker per Element and
+  > `Compilation::element_pages()` reads them back through the introspector — the in-process
+  > equivalent of `typst query`, which is CLI-only. **A sibling, never a wrapper**: the icon test
+  > already proved page-level markup breaks inside the probe's containers, and the RenderPass is
+  > where `#set page` has to keep working.
+  >
+  > **The trap, and it is the reason this has a test of its own.** `#page(flipped: true)` *starts*
+  > a page, so a marker emitted before a rotated element reports the page **before** it — every
+  > landscape table would have sent the reader one page early. The marker goes inside the flipped
+  > block. Verified by putting the mistake back: the test fails with *"the table reports page 1,
+  > which is portrait"*.
+  >
+  > Composed in the worker rather than inside `Review`, from the **same** `Compilation` the PDF and
+  > the preview come from — so a page reference is the page the reader will actually turn to — and
+  > re-derived after every Override, because allowing something moves the layout and a stale
+  > reference is worse than none. For the same reason an Element the layout could not place shows
+  > no page instead of defaulting to 1.
+  >
+  > **Out of scope, deliberately:** the batch path. `job.rs` seals *before* it compiles, so
+  > `DiagnosticSealed` events still carry `page: None`. Reordering seal and compile to fix that is
+  > a contract change, and nobody asked for one.
+  >
+  > **Every new assertion was mutation-checked** — ranking removed, group-apply truncated to its
+  > first element, landscape marker moved outside the block; all three fail, each naming what
+  > broke. That habit has now caught one vacuous test and confirmed three real ones this week.

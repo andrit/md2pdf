@@ -11,7 +11,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use md2pdf_domain::{AttentionList, BlanketResolution, Override, Template};
+use md2pdf_domain::{AttentionGroup, AttentionList, BlanketResolution, Override, Permit, Template};
 use md2pdf_engine::{Command, Event};
 use md2pdf_template::TemplateCatalogue;
 
@@ -295,9 +295,23 @@ impl App {
         }
     }
 
-    /// What to ask for when the user accepts an offer.
+    /// What to ask for when the user accepts an offer for one Element.
     pub fn allow_request(&self, over: Override) -> Request {
-        Request::Allow(over)
+        Request::Allow(vec![over])
+    }
+
+    /// What to ask for when the user accepts an offer for a whole grouped row.
+    ///
+    /// The same permission for every Element in the group — which is coherent precisely
+    /// because a group is one `CompromiseKind`, and offers are made per kind.
+    pub fn allow_group_request(&self, group: &AttentionGroup, permit: Permit) -> Request {
+        Request::Allow(
+            group
+                .ids
+                .iter()
+                .map(|&id| Override { id, permit })
+                .collect(),
+        )
     }
 
     /// Which page to raster next, if any is missing.

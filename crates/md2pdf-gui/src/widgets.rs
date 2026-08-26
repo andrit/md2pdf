@@ -13,7 +13,6 @@
 
 use md2pdf_app::state::{App, SourceState};
 use md2pdf_app::worker::Request;
-use md2pdf_domain::Override;
 
 /// The chosen Sources and what happened to each.
 ///
@@ -192,16 +191,45 @@ pub fn attention_list(ui: &mut egui::Ui, app: &App) -> Option<Request> {
     egui::ScrollArea::vertical()
         .id_salt("attention")
         .show(ui, |ui| {
-            for item in &list.items {
+            // **Grouped and ranked by `md2pdf-app`'s domain, drawn in the order given.**
+            // Twenty rows saying "wrapped its cells" used to bury the one saying content
+            // was clipped; now the worst kind is first and each kind is one row.
+            for group in list.grouped() {
                 ui.group(|ui| {
-                    ui.label(describe(&item.what));
-                    if let Some(request) = adjustment_panel(ui, app, item) {
+                    let count = group.count();
+                    ui.label(describe(&group.what));
+                    if count > 1 {
+                        ui.small(format!("{count} elements"));
+                    }
+                    if let Some(reference) = pages_line(&group.pages) {
+                        ui.small(reference);
+                    }
+                    if let Some(request) = adjustment_panel(ui, app, &group) {
                         intent = Some(request);
                     }
                 });
             }
         });
     intent
+}
+
+/// "page 4" / "pages 2, 5 and 9" — or nothing at all.
+///
+/// **Nothing rather than "page unknown"**: the page is absent only when the layout could
+/// not place the Element, and a row that explains its own missing metadata is worse than
+/// a row that simply does not offer one.
+fn pages_line(pages: &[u32]) -> Option<String> {
+    match pages {
+        [] => None,
+        [one] => Some(format!("page {one}")),
+        [rest @ .., last] => Some(format!(
+            "pages {} and {last}",
+            rest.iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
 }
 
 /// The offers for one Element.
@@ -212,15 +240,15 @@ pub fn attention_list(ui: &mut egui::Ui, app: &App) -> Option<Request> {
 pub fn adjustment_panel(
     ui: &mut egui::Ui,
     app: &App,
-    item: &md2pdf_domain::Attention,
+    group: &md2pdf_domain::AttentionGroup,
 ) -> Option<Request> {
     let mut intent = None;
-    for offer in &item.offers {
+    for offer in &group.offers {
+        // One button for the whole row, because a group is one `CompromiseKind` and
+        // offers are made per kind — the same permission is the right answer for every
+        // member. It is also one re-decide instead of five.
         if ui.button(offer.label).clicked() {
-            intent = Some(app.allow_request(Override {
-                id: item.id,
-                permit: offer.permit,
-            }));
+            intent = Some(app.allow_group_request(group, offer.permit));
         }
     }
     intent

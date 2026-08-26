@@ -1005,3 +1005,76 @@ fn probing_one_element_agrees_with_probing_the_document() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Which page an Element landed on. Only the final layout knows: the ProbePass
+// measures outside the page flow precisely so that it can measure at all.
+// ---------------------------------------------------------------------------
+
+/// A block of a known height, so page breaks fall where the arithmetic says.
+fn tall(order: u32, height_pt: u32) -> Element {
+    Element::new(
+        order,
+        ElementClass::Prose,
+        Markup::raw(format!("#block(width: 100%, height: {height_pt}pt)[.]")),
+    )
+}
+
+#[test]
+fn each_element_reports_the_page_it_landed_on() {
+    // 320pt page, 12pt margins => 296pt of usable height. Three 150pt blocks cannot
+    // share a page: one and two go to page 1 and 2 respectively once spacing is counted,
+    // which is the point — the pages must *differ*, and rise.
+    let template = template();
+    let elements = vec![tall(0, 150), tall(1, 150), tall(2, 150), tall(3, 150)];
+    let ts = Typesetter::new();
+    let (map, _) = ts.probe(&elements, &template).expect("probe");
+    let pages = ts
+        .render(&elements, &template, &map)
+        .expect("render")
+        .element_pages();
+
+    assert_eq!(pages.len(), elements.len(), "an Element reported no page");
+    assert_eq!(pages[&0], 1, "the first Element is not on page 1");
+    let mut last = 0;
+    for order in 0..elements.len() as u32 {
+        let page = pages[&order];
+        assert!(
+            page >= last,
+            "element {order} reports page {page} after element {} reported {last}",
+            order.saturating_sub(1)
+        );
+        last = page;
+    }
+    assert!(
+        last > 1,
+        "four 150pt blocks fitted on one 296pt page — the fixture stopped testing anything"
+    );
+}
+
+#[test]
+fn a_landscape_element_reports_its_own_page_not_the_one_before_it() {
+    // The trap in the marker's placement. `#page(flipped: true)` *starts* a page, so a
+    // marker emitted before it lands on the preceding one and every rotated table would
+    // send the reader to the wrong page. It goes inside the flipped block instead.
+    let template = template();
+    let elements = vec![tall(0, 150), wide_table()];
+    let ts = Typesetter::new();
+    let (map, _) = ts.probe(&elements, &template).expect("probe");
+    assert_eq!(
+        map.get(&elements[1].id).unwrap().orientation,
+        Orientation::Landscape,
+        "the fixture stopped rotating, so this no longer tests placement"
+    );
+
+    let compilation = ts.render(&elements, &template, &map).expect("render");
+    let pages = compilation.element_pages();
+    let geometry = compilation.geometry();
+    let table_page = pages[&elements[1].id.order];
+
+    assert!(
+        geometry[table_page as usize - 1].is_landscape(),
+        "the table reports page {table_page}, which is portrait — the marker landed on \
+         the page before the flipped one"
+    );
+}

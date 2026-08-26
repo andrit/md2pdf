@@ -50,7 +50,11 @@ pub enum Request {
         template: Box<Template>,
     },
     /// Allow something the ladder refused, and re-decide under it.
-    Allow(Override),
+    ///
+    /// **A list, because the attention list groups.** One row of it is one intention —
+    /// "give all five of these a landscape page" — and sending five requests would
+    /// re-probe five times and draw four decisions nobody asked to see.
+    Allow(Vec<Override>),
     /// Take back a permission.
     Withdraw(Override),
     /// Raster one page of whatever is currently open.
@@ -153,10 +157,10 @@ fn run(requests: Receiver<Request>, updates: Sender<Update>) {
 
             Request::Open { source, template } => {
                 match open_document(&source, *template, &broker, &typesetter) {
-                    Ok((review, pages)) => {
+                    Ok((review, attention, pages)) => {
                         let _ = updates.send(Update::Opened {
                             source: source.clone(),
-                            attention: Box::new(review.attention()),
+                            attention: Box::new(attention),
                             pages,
                         });
                         open = Some((source, review));
@@ -167,17 +171,17 @@ fn run(requests: Receiver<Request>, updates: Sender<Update>) {
                 }
             }
 
-            Request::Allow(over) => {
+            Request::Allow(overs) => {
                 if let Some((_, review)) = open.as_mut() {
-                    match review.apply(over, &typesetter) {
-                        // False means the Override names an Element this document does
-                        // not have — a stale click after the file changed underneath.
-                        Ok(false) => {
+                    match review.apply_all(&overs, &typesetter) {
+                        // None of them named an Element this document still has — a
+                        // stale click after the file changed underneath.
+                        Ok(0) => {
                             let _ = updates.send(Update::Failed(
                                 "that element is no longer in this document".into(),
                             ));
                         }
-                        Ok(true) => send_redecided(review, &typesetter, &updates),
+                        Ok(_) => send_redecided(review, &typesetter, &updates),
                         Err(e) => {
                             let _ = updates.send(Update::Failed(e.to_string()));
                         }
@@ -219,7 +223,7 @@ fn open_document(
     template: Template,
     broker: &PathBroker,
     typesetter: &Typesetter,
-) -> Result<(Review, usize), String> {
+) -> Result<(Review, AttentionList, usize), String> {
     let markdown = broker.read_to_string(source).map_err(|e| e.to_string())?;
     let parent = source
         .parent()
@@ -229,20 +233,35 @@ fn open_document(
     let context = md2pdf_convert::SourceContext::with_template(&parent, &images, template.clone());
     let review =
         Review::open(&markdown, &context, template, typesetter).map_err(|e| e.to_string())?;
-    let pages = review
-        .render(typesetter)
-        .map(|c| c.page_count())
-        .unwrap_or(0);
-    Ok((review, pages))
+    let (attention, pages) = looked_at(&review, typesetter);
+    Ok((review, attention, pages))
+}
+
+/// The attention list and the page count, from **one** render.
+///
+/// Both answers come from the laid-out document, and it is the same `Compilation` the PDF
+/// and the preview are made from — so a page reference in the list is the page the reader
+/// will actually turn to. Rendering twice to get them separately would also be rendering
+/// twice to get two answers that must agree.
+fn looked_at(review: &Review, typesetter: &Typesetter) -> (AttentionList, usize) {
+    match review.render(typesetter) {
+        Ok(compilation) => (
+            review.attention().with_pages(&compilation.element_pages()),
+            compilation.page_count(),
+        ),
+        // A document that will not render still has concessions worth showing; they just
+        // cannot say where. Reporting none would hide the reason it failed.
+        Err(_) => (review.attention(), 0),
+    }
 }
 
 fn send_redecided(review: &Review, typesetter: &Typesetter, updates: &Sender<Update>) {
-    let pages = review
-        .render(typesetter)
-        .map(|c| c.page_count())
-        .unwrap_or(0);
+    // Re-derived, not carried over: an Override changes the layout, so the page an
+    // Element sits on can move. A stale page reference would send the reader to the page
+    // it *used* to be on, which is the failure mode a reference exists to prevent.
+    let (attention, pages) = looked_at(review, typesetter);
     let _ = updates.send(Update::Redecided {
-        attention: Box::new(review.attention()),
+        attention: Box::new(attention),
         pages,
     });
 }

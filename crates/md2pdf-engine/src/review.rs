@@ -103,6 +103,40 @@ impl Review {
         Ok(true)
     }
 
+    /// Apply several permissions and re-decide **once**.
+    ///
+    /// What the grouped attention list clicks: "give all five of these a landscape page"
+    /// is one intention, and running it as five `apply` calls would re-probe five times
+    /// and emit four intermediate decisions nobody asked to see. `refresh` already takes
+    /// a set of ids, so the whole row costs one probe.
+    ///
+    /// Returns how many of the Overrides named an Element this document still has.
+    /// **Zero is not an error** and is reported as such by the caller — it means every
+    /// click was stale, which is the same condition [`apply`](Self::apply) returns
+    /// `false` for.
+    pub fn apply_all(
+        &mut self,
+        overs: &[Override],
+        typesetter: &Typesetter,
+    ) -> Result<usize, JobError> {
+        let live: Vec<Override> = overs
+            .iter()
+            .filter(|o| self.conversion.elements.iter().any(|e| e.id.matches(&o.id)))
+            .copied()
+            .collect();
+        if live.is_empty() {
+            return Ok(0);
+        }
+        for over in &live {
+            // Replaces rather than accumulates, for the same reason `apply` does.
+            self.overrides.retain(|o| !o.id.matches(&over.id));
+            self.overrides.push(*over);
+        }
+        let ids: Vec<_> = live.iter().map(|o| o.id).collect();
+        self.refresh(&ids, typesetter)?;
+        Ok(live.len())
+    }
+
     /// Withdraw a permission and re-decide without it.
     pub fn withdraw(&mut self, over: &Override, typesetter: &Typesetter) -> Result<(), JobError> {
         self.overrides.retain(|o| !o.id.matches(&over.id));

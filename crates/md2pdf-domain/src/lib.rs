@@ -21,9 +21,9 @@ pub mod template;
 
 pub use collision::{BlanketResolution, Collision, Resolution};
 pub use decision::{Decision, DecisionMap, Orientation, Reduction};
-pub use diagnostic::{Compromise, CompromiseKind, Diagnostic};
+pub use diagnostic::{Compromise, CompromiseKind, Diagnostic, Severity};
 pub use element::{Element, ElementClass, ElementId};
 pub use hash::fnv1a;
 pub use markup::Markup;
-pub use review::{Attention, AttentionList, OfferedFix, Override, Permit};
+pub use review::{Attention, AttentionGroup, AttentionList, OfferedFix, Override, Permit};
 pub use template::{Floors, Template};

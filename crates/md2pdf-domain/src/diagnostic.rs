@@ -45,6 +45,62 @@ pub enum CompromiseKind {
     },
 }
 
+/// How badly a Compromise treated the document. Lower is worse.
+///
+/// **The ranking the attention list is sorted by, and it is a domain judgment rather
+/// than a display preference** — which is why it lives here and not in a widget. The
+/// question it answers is *how much of the author's document survived*:
+///
+/// | | | |
+/// |---|---|---|
+/// | 0 | content was lost | `Clipped`, a missing or skipped image, an unsupported construct |
+/// | 1 | content survived, reduced | `ShrunkToFloor`, `Scaled`, `Rotated` |
+/// | 2 | content survived intact | `Reflowed` |
+///
+/// `Reflowed` last is the point of having this at all. `offers_for` already says it —
+/// *"clipping is not offered, because reflow already lost nothing"* — and yet an
+/// unsorted list gave the mildest outcome the same weight as the one that destroyed
+/// content, and the mildest is by far the commonest. Twenty wrapped tables pushed the
+/// one clipped element off the bottom of the panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Severity {
+    Lost = 0,
+    Reduced = 1,
+    Intact = 2,
+}
+
+impl CompromiseKind {
+    pub fn severity(&self) -> Severity {
+        match self {
+            Self::Clipped
+            | Self::ImageMissing
+            | Self::ImageSkipped
+            | Self::UnsupportedConstruct { .. } => Severity::Lost,
+            Self::ShrunkToFloor { .. } | Self::Scaled { .. } | Self::Rotated => Severity::Reduced,
+            Self::Reflowed => Severity::Intact,
+        }
+    }
+
+    /// A stable key for grouping. **The variant, never the detail** — two elements
+    /// shrunk to 9pt and 8pt made the same kind of concession and carry the same offers,
+    /// so splitting them apart would rebuild the noise this exists to collapse.
+    pub fn group_key(&self) -> String {
+        match self {
+            Self::ShrunkToFloor { .. } => "shrunk".into(),
+            Self::Scaled { .. } => "scaled".into(),
+            Self::Rotated => "rotated".into(),
+            Self::Reflowed => "reflowed".into(),
+            Self::Clipped => "clipped".into(),
+            Self::ImageSkipped => "image-skipped".into(),
+            Self::ImageMissing => "image-missing".into(),
+            // Named in the key, because each unrepresentable construct is a different
+            // thing to go and fix. These do not collapse the way a repeated ladder
+            // decision does — "3 things md2pdf could not represent" tells you nothing.
+            Self::UnsupportedConstruct { construct } => format!("unsupported:{construct}"),
+        }
+    }
+}
+
 /// Every Compromise recorded during one Compilation. Sealed when the ProbePass
 /// finishes; discarded whole and rebuilt on recompile, never merged.
 ///

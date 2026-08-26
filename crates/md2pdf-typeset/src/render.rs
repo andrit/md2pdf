@@ -35,17 +35,30 @@ pub fn render_source(elements: &[Element], template: &Template, map: &DecisionMa
             _ => el.body.to_string(),
         };
         let reduced = reduce(&source, decision.reduction, template);
+        // A zero-size marker carrying the Element's order, so the compiled document can
+        // be asked which page each Element landed on (`Compilation::element_pages`).
+        // `metadata` draws nothing and occupies nothing; it exists to be queried.
+        //
+        // **A sibling, never a wrapper.** The ProbePass wraps elements in containers and
+        // that is exactly why `#set page` is illegal inside it — the RenderPass is where
+        // page-level markup has to keep working, so nothing here may enclose the body.
+        let marker = format!("#metadata({})<md2pdf-el>", el.id.order);
         match decision.orientation {
             Orientation::Portrait => {
-                s.push_str(&format!("{reduced}\n#v(0.65em)\n"));
+                // Before the body: the page an Element *starts* on is the one worth
+                // being sent to. An Element that breaks across pages reports the first.
+                s.push_str(&format!("{marker}\n{reduced}\n#v(0.65em)\n"));
             }
             Orientation::Landscape => {
                 // Legal at top level. Illegal inside `layout()`, which is one reason
                 // the ProbePass does not use it. The size was already chosen against
                 // the landscape width by the probe — nothing is re-measured here,
                 // because the RenderPass never measures.
+                // *Inside* the flipped page, not before it: `#page()` starts a new page,
+                // so a marker placed before this one would report the page before the
+                // element rather than the element's own.
                 s.push_str(&format!(
-                    "#page(flipped: true, margin: {}pt)[{reduced}]\n",
+                    "#page(flipped: true, margin: {}pt)[{marker}{reduced}]\n",
                     template.margin_pt
                 ));
             }
