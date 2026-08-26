@@ -1405,7 +1405,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > the entry* now. Subjects were already `.strip()`ed; nothing can strip markup that was never in
   > the commit, so the rule is now written down instead.
 
-- `<pending>` **feat(gui): a Choose… button, and a Finder panel that the gate can typecheck** (phase 4, part 12).
+- `50fe237` **feat(gui): a Choose… button, and a Finder panel that the gate can typecheck** (phase 4, part 12).
 
   > **The refusal was re-priced and it had gone stale.** Part 3 declined a file dialog because
   > `rfd` would cost a vendoring round, and that was true. What nobody checked is that
@@ -1456,3 +1456,34 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > the field being the record of what was asked for, and the two disagreeing being the bug the
   > dropped-folder path already had to fix once. Off the main thread it returns `None` rather than
   > panicking: AppKit is main-thread-only, and a file dialog is not worth ending the process over.
+
+- `<pending>` **fix(gui): make the collision question look like a question** (phase 4, part 13).
+
+  > **The first batch anyone has run through the window: "I dragged a folder of md files in and it
+  > doesn't seem to be doing anything."** It was doing exactly what it was told to. `Convert` was
+  > disabled and said, underneath itself, *"say what to do about files that already exist"* — and
+  > the three answers were on screen the whole time.
+  >
+  > **They did not look like answers.** `ui.selectable_value` draws *nothing* when unselected — no
+  > border, no marker — so "skip it / write alongside / replace it" rendered as plain prose
+  > continuing the sentence "If a PDF already exists:". A required control that is indistinguishable
+  > from a caption. `ui.radio_value` is a one-word change and an empty radio circle says both
+  > things the label could not: this is a control, and it has not been used. The prompt is tinted
+  > while unanswered, so the eye lands on the question rather than the button it is disabling.
+  >
+  > **No default was added, and that is the point.** The engine refuses one because every possible
+  > answer is wrong (`plan-app.md` D6) — silently overwriting a folder of PDFs is not a better
+  > outcome than being asked. The fix for a question nobody could see is to make it look like a
+  > question.
+  >
+  > **The logic was tested and correct the entire time.**
+  > `a_batch_needs_an_answer_about_collisions_before_it_can_start` has passed since 3c2 and asserts
+  > precisely this refusal. It is a fair test of the rule and it cannot see an affordance — which
+  > is the honest summary of this whole phase: **the defect rate has been in what the window
+  > *shows*, and every green suite in the repo is blind to that**. Single files never ask this
+  > question, so the working half hid the broken half again, exactly as it did for the spinner.
+  >
+  > **Second defect in the same screenshot**, same class: the attention panel returned before
+  > drawing its heading when nothing was open, so a batch showed an entirely blank column — no
+  > title, no text. Indistinguishable from a panel that failed to render. The heading now comes
+  > first and the empty state says what will appear there.

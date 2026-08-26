@@ -175,14 +175,30 @@ pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) 
         }
     }
 
+    // **Radios, not selectable labels.** `selectable_value` draws nothing at all when it
+    // is unselected — so three *required* choices rendered as plain text continuing the
+    // sentence above them, and a folder drop looked like the app doing nothing while it
+    // waited for an answer nobody could see was being asked. A radio with an empty circle
+    // says both that this is a control and that it has not been used.
+    //
+    // Still no default. The engine refuses one because every possible answer is wrong
+    // (`plan-app.md` D6); the fix for an unanswered question is to make it look like a
+    // question, not to answer it on the user's behalf.
+    let unanswered = app.chosen.on_collision.is_none();
     ui.horizontal(|ui| {
-        ui.label("If a PDF already exists:");
+        // Tinted while it is the thing standing between you and a conversion, so the eye
+        // lands on the control rather than on the greyed-out button it is disabling.
+        if unanswered {
+            ui.colored_label(ui.visuals().warn_fg_color, "If a PDF already exists:");
+        } else {
+            ui.label("If a PDF already exists:");
+        }
         for (label, value) in [
             ("skip it", R::SkipAll),
             ("write alongside", R::RenameAll),
             ("replace it", R::OverwriteAll),
         ] {
-            ui.selectable_value(&mut app.chosen.on_collision, Some(value), label);
+            ui.radio_value(&mut app.chosen.on_collision, Some(value), label);
         }
     });
 
@@ -209,11 +225,15 @@ pub fn job_settings(ui: &mut egui::Ui, app: &mut App, destination: &mut String) 
 
 /// What md2pdf conceded, and what can be allowed instead.
 pub fn attention_list(ui: &mut egui::Ui, app: &App) -> Option<Request> {
+    let mut intent = None;
+    // **The heading is drawn before the early return, not after it.** An entire panel
+    // with nothing in it — no title, no text — is indistinguishable from one that failed
+    // to draw, which is exactly how it read in the batch screenshot.
+    ui.heading("Needs your attention");
     let Some(list) = &app.attention else {
+        ui.label("Open a document and anything md2pdf had to decide will appear here.");
         return None;
     };
-    let mut intent = None;
-    ui.heading("Needs your attention");
     if list.is_empty() {
         ui.label("Nothing — this document converted cleanly.");
         return None;
