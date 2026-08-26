@@ -1172,7 +1172,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > deliberately **not** in this commit: it is a different defect in a different read model, and
   > burying it inside a template fix is how it would stop being findable.
 
-- `<pending>` **fix(app): flag a Source from the sealed Diagnostic, not the conversion count** (phase 4, part 6).
+- `0a0dfaf` **fix(app): flag a Source from the sealed Diagnostic, not the conversion count** (phase 4, part 6).
 
   > **The defect the previous commit found, closed.** `App::absorb_event` flagged from
   > `SourceConverted.compromises` — the *conversion* half — and dropped `DiagnosticSealed` on its
@@ -1201,3 +1201,42 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > in place, and nothing but re-running it against the defect would have shown that. Two of the
   > three rewritten unit tests had encoded the old behaviour as correct; the third passed either
   > way and changed only to use the new helper.
+
+- `<pending>` **feat(app): md2pdf.app — a double-clickable bundle, icon and all** (phase 4, part 7).
+
+  > **Asked for, not planned: "can we create that desktop icon so I can use that to open the app?"**
+  > `roadmap.md` §6 has packaging as operator-owned and mostly-not-engineering, and it stays that
+  > way — this is the `.app` alone. No `.dmg`, no other platform, no build matrix.
+  >
+  > **It forced §5's decision early.** An `Info.plist` needs a `CFBundleIdentifier`, and the
+  > roadmap wants that set "at the latest" in the settings phase because changing it after
+  > anything persists under it strands what persisted. Operator chose **`com.rhizolabs.md2pdf`**.
+  > Worth recording that the stated reason does not actually bind here: `roots::config_dir`
+  > resolves `~/Library/Application Support/md2pdf` from the *name*, so md2pdf's own templates and
+  > settings never depended on the identifier. It matters for LaunchServices and for signing, if
+  > that day comes.
+  >
+  > **Two runtime facts checked before the bundle was designed, not after it misbehaved.** Fonts
+  > are `include_bytes!` in `md2pdf-typeset`, so nothing font-shaped has to ship beside the binary.
+  > Templates are found by `roots::beside_binary()` — `templates/` next to the executable, which in
+  > a bundle is `Contents/MacOS/`, not the `Contents/Resources/` a Mac developer would expect.
+  > They go where the code looks and the divergence is commented at the copy; moving them would be
+  > a macOS arm in `roots`, which is a code change and not one to make silently inside a packaging
+  > script.
+  >
+  > **`NSHighResolutionCapable`** is set, without which macOS runs the app through the 2x upscaler
+  > and the preview — the entire point of the window — renders soft.
+  >
+  > **Verified without a Mac**, which is the interesting part. The container cannot link
+  > `md2pdf-gui`, let alone emit Mach-O. So the script's `uname` guard was checked here, the
+  > version-extraction `awk` was run against the real manifest, and the whole assembly was
+  > dry-run with `sips`, `iconutil` and `cargo` stubbed on `PATH` — producing a real tree with a
+  > real `Info.plist`, which is what caught that paths and the plist were right. What remains
+  > unverified on Linux is exactly the two things only macOS can answer: that the Mach-O binary
+  > runs, and that the `.icns` renders.
+  >
+  > **Also here, because it bit while writing this entry:** the previous commit's message was
+  > pasted with a **leading space**, so `commit-log.sh` matched nothing and cheerfully reported
+  > "hashes are current" — its entry would have sat `<pending>` forever. The gate that exists to
+  > catch silent drift went silent, over an invisible character. Subjects are now `.strip()`ed
+  > before matching, and the hash it then found is filled in above.

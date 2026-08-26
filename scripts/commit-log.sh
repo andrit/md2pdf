@@ -50,7 +50,13 @@ for probe, want in [
 log = subprocess.run(
     ["git", "log", "--format=%h\t%s"], capture_output=True, text=True
 ).stdout.splitlines()
-commits = [tuple(line.split("\t", 1)) for line in log if "\t" in line]
+# `.strip()` on the subject: a commit whose message was pasted with a leading space —
+# `" fix(app): flag a Source…"` — matched nothing, so its entry stayed `<pending>` and
+# this script reported "hashes are current". Silent drift, which is the one thing it
+# exists to prevent, caused by a character nobody can see. 2026-08-26.
+commits = [
+    (h, s.strip()) for h, s in (line.split("\t", 1) for line in log if "\t" in line)
+]
 
 lines = open(path).read().split("\n")
 out, stale, ambiguous = [], [], []

@@ -319,6 +319,9 @@ Lifted from the "Emerging desktop type shape" section of the stack decisions, an
 engineering:
 
 - Platform packaging (`.app`/`.dmg`, `.msi`, AppImage/`.deb`), multi-platform build matrix
+  - **`.app` done ahead of this phase (2026-08-26)** — `scripts/make-app.sh` builds and installs a
+    double-clickable bundle, on request rather than on plan. It forced §5's bundle identifier
+    early: `com.rhizolabs.md2pdf`. `.dmg`, the other platforms and the build matrix are untouched.
 - **Signing and notarization deferred by decision (2026-08-16)** — ~$200–500/yr before a single
   sale. Not bought now; the cheap door-opening steps are taken instead.
 - **Glyph coverage beyond Latin must be checked before the FontBook is frozen** — still open from
