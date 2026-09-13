@@ -829,7 +829,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > §6 re-measured with `recount_the_baseline` rather than the batch, which is OOM-killed at ~141 of
   > 146 on this machine (**F3**, and it kills an unmodified binary too).
 
-- `<pending>` **feat(typeset): evict the `comemo` cache; the batch was never bounded** (T31, closes F3).
+- `4ed3449` **feat(typeset): evict the `comemo` cache; the batch was never bounded** (T31, closes F3).
 
   > **Five sightings, and this is the first time anyone plotted the curve.** One long-lived
   > `Typesetter`, the corpus a document at a time, RSS from the kernel:
@@ -1457,7 +1457,7 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > dropped-folder path already had to fix once. Off the main thread it returns `None` rather than
   > panicking: AppKit is main-thread-only, and a file dialog is not worth ending the process over.
 
-- `<pending>` **fix(gui): make the collision question look like a question** (phase 4, part 13).
+- `0006fa6` **fix(gui): make the collision question look like a question** (phase 4, part 13).
 
   > **The first batch anyone has run through the window: "I dragged a folder of md files in and it
   > doesn't seem to be doing anything."** It was doing exactly what it was told to. `Convert` was
@@ -1487,3 +1487,23 @@ Newest last. Docs-only and plan commits are listed by subject alone; code commit
   > drawing its heading when nothing was open, so a batch showed an entirely blank column — no
   > title, no text. Indistinguishable from a panel that failed to render. The heading now comes
   > first and the empty state says what will appear there.
+
+- `<pending>` **chore(scripts): sync commit-log.sh from the workbench — HEAD check and typography fold**
+  This script was born here on 2026-08-26 and ported to the workbench four days later, where it
+  earned three fixes this copy never received: whitespace folding, a **HEAD check** (does the newest
+  commit have an entry at all?), and a **typography fold** in the matcher — em/en dash and `--` to
+  `-`, backticks and apostrophes dropped, curly quotes straightened — after the workbench audit of
+  2026-09-13 found seven entries orphaned by exactly one such character each.
+  **The old copy here had the blind spot the fold exists to close, and it was already live:**
+  `4ed3449` (T31, the comemo eviction) was written with backticks around `comemo` and committed
+  without them; the prefix test matched nothing, the entry sat `<pending>` since 2026-08-16, and the
+  script reported "hashes are current" — the check-that-cannot-fail shape this phase kept finding
+  in the GUI, here in the tooling. Found on the first read-only run of the synced script, filled by
+  `--fix` along with `0006fa6`'s own entry; the diff to this log is those two lines and this entry.
+  Synced **verbatim** (python body byte-identical to the workbench's; only the header provenance
+  line differs) rather than patched, so the two copies cannot drift again — the workbench's is the
+  reference. Its self-check carries the seven real drift pairs plus a negative probe, so the fold
+  can neither silently stop working nor silently widen; case and lost letters are left unmatched on
+  purpose. Ran `./scripts/commit-log.sh` as `verify.sh` step 14 runs it, exit 0; **did not run the
+  full `verify.sh`** (a cargo build — nothing in this commit touches Rust). Done from the workbench
+  container over the rw `/projects` mount; the project stays paused at the app level.
